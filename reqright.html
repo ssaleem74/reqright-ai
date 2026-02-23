@@ -514,6 +514,7 @@ const S={
   // LLM settings
   showLLMSettings:false,
   llm:JSON.parse(localStorage.getItem("reqright_llm")||"null")||{provider:"anthropic",model:"claude-sonnet-4-5-20250929",apiKey:"",testStatus:null,testMsg:""},
+  llmReview:null, // {reqId, original, suggested, changes, confidence, loading, error}
 };
 
 function setState(updates){Object.assign(S,updates);render();}
@@ -921,6 +922,97 @@ function bulkAI(){
   let c=0;S.reqs.forEach(r=>{if(!r.text.trim())return;const a=analyze(r.text);if(a.score<80){r.text=aiRewrite(r.text,a);r.modified=new Date().toISOString();c++;}});
   autoSave();toast(`Improved ${c} requirements`,"success");render();
 }
+
+// ─── LLM-POWERED SMART REWRITE ──────────────────────────────
+async function llmRewrite(req){
+  const a=analyze(req.text);
+  const failedRules=a.results.filter(r=>!r.pass&&r.weight>0);
+  const glossaryTerms=S.glossary.map(g=>g.term+": "+g.def).join("\n");
+  const weightProfile=Object.entries(S.ruleWeights).filter(([k,v])=>v>=2).map(([k,v])=>k+" ("+v+"×)").join(", ");
+
+  const systemPrompt=`You are an expert systems engineer specialising in INCOSE Guide to Writing Requirements (GtWR) v4. Your task is to rewrite a requirement to fix specific rule violations while preserving the original intent.
+
+RULES TO FIX:
+${failedRules.map(r=>"- "+r.id+": "+r.nm+" — "+r.msg).join("\n")}
+
+INCOSE BEST PRACTICES:
+- Use "shall" as the obligation keyword (not "should", "will", "must")
+- Use active voice with a named subject: "The [System_Name] shall..."
+- One requirement per sentence (no combinators like "and/or" joining separate actions)
+- Include measurable values with ± tolerances where applicable
+- Avoid vague terms: adequate, appropriate, fast, efficient, reliable, etc.
+- Avoid escape clauses: as applicable, where possible, as needed, etc.
+- Avoid absolutes: always, never, 100%, all, none
+- Use "each" instead of "all/any/every"
+- No pronouns — use the actual entity name
+- No parenthetical content or subordinate clauses that add separate requirements
+${glossaryTerms?"\nPROJECT GLOSSARY:\n"+glossaryTerms:""}
+${weightProfile?"\nHIGH-PRIORITY RULES (weighted 2×+): "+weightProfile:""}
+REQUIREMENT CONTEXT:
+- Type: ${req.type||"Not set"}
+- Level: ${req.level||"Not set"}
+- Parent: ${req.parent||"None"}
+
+RESPOND WITH ONLY A JSON OBJECT — no markdown, no backticks, no explanation:
+{"text":"the rewritten requirement","changes":"brief summary of what was changed and why","confidence":0.0 to 1.0}`;
+
+  const userPrompt=`Rewrite this requirement to fix the ${failedRules.length} violation${failedRules.length!==1?"s":""} listed above:\n\n"${req.text}"`;
+
+  if(S.llm.provider==="anthropic"){
+    const resp=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-api-key":S.llm.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+      body:JSON.stringify({model:S.llm.model,max_tokens:1024,system:systemPrompt,messages:[{role:"user",content:userPrompt}]})
+    });
+    if(!resp.ok){const err=await resp.json().catch(()=>({}));throw new Error((err.error&&err.error.message)||"HTTP "+resp.status);}
+    const data=await resp.json();
+    const raw=(data.content&&data.content[0]&&data.content[0].text)||"";
+    return JSON.parse(raw.replace(/```json|```/g,"").trim());
+  } else {
+    const resp=await fetch("https://api.openai.com/v1/chat/completions",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+S.llm.apiKey},
+      body:JSON.stringify({model:S.llm.model,max_tokens:1024,messages:[{role:"system",content:systemPrompt},{role:"user",content:userPrompt}]})
+    });
+    if(!resp.ok){const err=await resp.json().catch(()=>({}));throw new Error((err.error&&err.error.message)||"HTTP "+resp.status);}
+    const data=await resp.json();
+    const raw=(data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content)||"";
+    return JSON.parse(raw.replace(/```json|```/g,"").trim());
+  }
+}
+
+async function doLLMAI(id){
+  const r=S.reqs.find(x=>x.id===id);if(!r||!r.text.trim())return;
+  S.llmReview={reqId:id,original:r.text,suggested:null,changes:null,confidence:null,loading:true,error:null};
+  render();
+  try{
+    const result=await llmRewrite(r);
+    S.llmReview.suggested=result.text;
+    S.llmReview.changes=result.changes;
+    S.llmReview.confidence=result.confidence;
+    S.llmReview.loading=false;
+  }catch(e){
+    S.llmReview.loading=false;
+    S.llmReview.error=e.message||"LLM request failed";
+  }
+  render();
+}
+
+function acceptLLM(){
+  if(!S.llmReview||!S.llmReview.suggested)return;
+  History.save();
+  const r=S.reqs.find(x=>x.id===S.llmReview.reqId);if(!r)return;
+  const oldText=r.text;const oldScore=analyze(oldText).score;
+  r.text=S.llmReview.suggested;
+  r.modified=new Date().toISOString();
+  if(!r.history)r.history=[];
+  r.history.push({timestamp:new Date().toISOString(),field:"Statement (LLM Rewrite)",oldValue:oldText.substring(0,60)+(oldText.length>60?"…":""),newValue:r.text.substring(0,60)+(r.text.length>60?"…":""),author:"LLM ("+S.llm.model+")"});
+  const newScore=analyze(r.text).score;
+  S.llmReview=null;autoSave();
+  toast(`LLM: ${oldScore}% → ${newScore}%`,"success");render();
+}
+
+function rejectLLM(){S.llmReview=null;render();}
 function doImport(){
   History.save();
   const parsed=parseDoc(S.importText);
@@ -2596,8 +2688,15 @@ function render(){
       aiInfo.appendChild(h("div",{style:{fontSize:"15px",fontWeight:700,color:"var(--purple)",marginBottom:"4px"}},"⚡ AI Requirement Improver"));
       aiInfo.appendChild(h("div",{style:{fontSize:"12px",color:"var(--textMid)"}},curA?(curA.failed+" INCOSE violation"+(curA.failed!==1?"s":"")+" detected — AI can fix: "+curA.results.filter(r=>!r.pass).map(r=>r.id).join(", ")):""));
       aiTop.appendChild(aiInfo);
-      const aiBtn=h("button",{className:"btn btn-ai",disabled:S.aiLoading===cur.id,onClick:()=>doAI(cur.id)},S.aiLoading===cur.id?"⚡ Improving...":"⚡ AI IMPROVE NOW");
-      aiTop.appendChild(aiBtn);aiPanel.appendChild(aiTop);
+      const aiBtns=h("div",{style:{display:"flex",gap:"8px",alignItems:"center"}});
+      const aiBtn=h("button",{className:"btn btn-ai",disabled:S.aiLoading===cur.id,onClick:()=>doAI(cur.id)},S.aiLoading===cur.id?"⚡ Improving...":"⚡ Auto-Fix");
+      aiBtns.appendChild(aiBtn);
+      // LLM rewrite button (only if API key configured)
+      if(S.llm.apiKey&&S.llm.apiKey.length>10){
+        const llmBtn=h("button",{className:"btn",style:{padding:"8px 16px",background:"linear-gradient(135deg,#8b5cf6,#06b6d4)",color:"#fff",border:"none",borderRadius:"8px",fontSize:"13px",fontWeight:600,cursor:"pointer",fontFamily:"inherit",opacity:S.llmReview&&S.llmReview.loading?0.6:1},disabled:S.llmReview&&S.llmReview.loading,onClick:()=>doLLMAI(cur.id)},S.llmReview&&S.llmReview.loading&&S.llmReview.reqId===cur.id?"✨ Thinking...":"✨ LLM Rewrite");
+        aiBtns.appendChild(llmBtn);
+      }
+      aiTop.appendChild(aiBtns);aiPanel.appendChild(aiTop);
       const aiTags=h("div",{className:"ai-tags",style:{display:"flex",flexWrap:"wrap",gap:"6px"}});
       if(curA){curA.results.filter(r=>!r.pass).forEach(r=>{
         aiTags.appendChild(h("div",{style:{fontSize:"12px",padding:"4px 10px",borderRadius:"6px",background:"var(--danger)15",border:"1px solid var(--danger)33",color:"var(--danger)",fontWeight:500}},r.id+": "+(r.msg.length>50?r.msg.slice(0,50)+"...":r.msg)));
@@ -2610,6 +2709,76 @@ function render(){
       spText.appendChild(h("div",{style:{fontSize:"14px",fontWeight:600,color:"var(--success)"}},"All automated INCOSE checks passed"));
       spText.appendChild(h("div",{style:{fontSize:"12px",color:"var(--textMid)",marginTop:"2px"}},curA?`Score: ${curA.score}% (${curA.grade}) — ${curA.warnings} rules for manual review`:""));
       sp.appendChild(spText);center.appendChild(sp);
+
+      // ═══ LLM REVIEW PANEL ═══
+      if(S.llmReview&&S.llmReview.reqId===cur.id){
+        const lrp=h("div",{style:{background:"var(--card)",border:"1px solid var(--purple)44",borderRadius:"12px",padding:"18px",marginBottom:"14px"}});
+        
+        if(S.llmReview.loading){
+          lrp.appendChild(h("div",{style:{textAlign:"center",padding:"24px",color:"var(--purple)"}},
+            "✨ LLM is analysing your requirement and generating an improved version..."));
+          const dots=h("div",{style:{textAlign:"center",fontSize:"24px",color:"var(--purple)",animation:"pulse 1.5s infinite"}},"⏳");
+          lrp.appendChild(dots);
+        } else if(S.llmReview.error){
+          const errHead=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}});
+          errHead.appendChild(h("div",{style:{fontSize:"14px",fontWeight:600,color:"var(--danger)"}},"✕ LLM Rewrite Failed"));
+          errHead.appendChild(h("button",{style:{background:"none",border:"none",color:"var(--textMid)",cursor:"pointer",fontSize:"14px",fontFamily:"inherit"},onClick:rejectLLM},"✕ Close"));
+          lrp.appendChild(errHead);
+          lrp.appendChild(h("div",{style:{fontSize:"12px",color:"var(--danger)",padding:"8px 12px",background:"var(--danger)11",borderRadius:"6px"}},S.llmReview.error));
+        } else if(S.llmReview.suggested){
+          // Header
+          const lrHead=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}});
+          lrHead.appendChild(h("div",{style:{fontSize:"14px",fontWeight:700,color:"var(--purple)"}},"✨ LLM Suggestion"));
+          if(S.llmReview.confidence!=null){
+            const conf=Math.round(S.llmReview.confidence*100);
+            const confColor=conf>=80?"var(--success)":conf>=60?"var(--warn)":"var(--danger)";
+            lrHead.appendChild(h("span",{style:{fontSize:"11px",padding:"3px 8px",borderRadius:"8px",background:confColor+"22",color:confColor,fontWeight:600}},conf+"% confidence"));
+          }
+          lrp.appendChild(lrHead);
+
+          // Original
+          const origBox=h("div",{style:{padding:"10px 14px",borderRadius:"8px",background:"var(--danger)08",border:"1px solid var(--danger)22",marginBottom:"10px"}});
+          origBox.appendChild(h("div",{style:{fontSize:"10px",fontWeight:600,color:"var(--danger)",textTransform:"uppercase",letterSpacing:".05em",marginBottom:"4px"}},"Original"));
+          origBox.appendChild(h("div",{style:{fontSize:"13px",color:"var(--textMid)",lineHeight:"1.6",textDecoration:"line-through",textDecorationColor:"var(--danger)44"}},S.llmReview.original));
+          lrp.appendChild(origBox);
+
+          // Suggested
+          const sugBox=h("div",{style:{padding:"10px 14px",borderRadius:"8px",background:"var(--success)08",border:"1px solid var(--success)22",marginBottom:"10px"}});
+          sugBox.appendChild(h("div",{style:{fontSize:"10px",fontWeight:600,color:"var(--success)",textTransform:"uppercase",letterSpacing:".05em",marginBottom:"4px"}},"Suggested"));
+          sugBox.appendChild(h("div",{style:{fontSize:"13px",color:"var(--text)",lineHeight:"1.6",fontWeight:500}},S.llmReview.suggested));
+          lrp.appendChild(sugBox);
+
+          // Changes summary
+          if(S.llmReview.changes){
+            const chgBox=h("div",{style:{padding:"8px 12px",borderRadius:"6px",background:"var(--surfAlt)",marginBottom:"14px"}});
+            chgBox.appendChild(h("div",{style:{fontSize:"10px",fontWeight:600,color:"var(--textDim)",textTransform:"uppercase",letterSpacing:".05em",marginBottom:"3px"}},"Changes Made"));
+            chgBox.appendChild(h("div",{style:{fontSize:"12px",color:"var(--textMid)",lineHeight:"1.5"}},S.llmReview.changes));
+            lrp.appendChild(chgBox);
+          }
+
+          // Score comparison
+          const origScore=analyze(S.llmReview.original).score;
+          const newScore=analyze(S.llmReview.suggested).score;
+          const scoreDiff=newScore-origScore;
+          const scoreRow=h("div",{style:{display:"flex",alignItems:"center",gap:"12px",marginBottom:"14px"}});
+          scoreRow.appendChild(h("span",{style:{fontSize:"12px",color:"var(--textMid)"}},"Score:"));
+          scoreRow.appendChild(h("span",{style:{fontSize:"13px",fontWeight:700,color:origScore>=80?"var(--success)":"var(--danger)"}},origScore+"%"));
+          scoreRow.appendChild(h("span",{style:{fontSize:"12px",color:"var(--textMid)"}},"→"));
+          scoreRow.appendChild(h("span",{style:{fontSize:"13px",fontWeight:700,color:newScore>=80?"var(--success)":"var(--danger)"}},newScore+"%"));
+          if(scoreDiff!==0){
+            scoreRow.appendChild(h("span",{style:{fontSize:"11px",padding:"2px 6px",borderRadius:"6px",background:scoreDiff>0?"var(--success)22":"var(--danger)22",color:scoreDiff>0?"var(--success)":"var(--danger)",fontWeight:600}},(scoreDiff>0?"+":"")+scoreDiff+"%"));
+          }
+          lrp.appendChild(scoreRow);
+
+          // Accept / Reject buttons
+          const lrBtns=h("div",{style:{display:"flex",gap:"10px"}});
+          const acceptBtn=h("button",{style:{padding:"8px 20px",borderRadius:"8px",border:"none",background:"var(--success)",color:"#fff",fontSize:"13px",fontWeight:600,cursor:"pointer",fontFamily:"inherit"},onClick:acceptLLM},"✓ Accept Rewrite");
+          const rejectBtn=h("button",{style:{padding:"8px 20px",borderRadius:"8px",border:"1px solid var(--border)",background:"transparent",color:"var(--textMid)",fontSize:"13px",cursor:"pointer",fontFamily:"inherit"},onClick:rejectLLM},"✕ Discard");
+          lrBtns.appendChild(acceptBtn);lrBtns.appendChild(rejectBtn);
+          lrp.appendChild(lrBtns);
+        }
+        center.appendChild(lrp);
+      }
 
       // Attributes card
       const attrCard=h("div",{className:"card",style:{marginBottom:"14px"}});
