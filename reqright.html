@@ -2124,7 +2124,11 @@ function render(){
     const keyField=h("div",{style:{marginBottom:"20px"}});
     keyField.appendChild(h("label",{style:{display:"block",fontSize:"12px",fontWeight:600,color:"var(--textMid)",marginBottom:"6px",textTransform:"uppercase",letterSpacing:".05em"}},"API Key"));
     const keyRow=h("div",{style:{display:"flex",gap:"8px"}});
-    const keyInput=h("input",{type:"password",id:"llm-key-input",placeholder:S.llm.provider==="anthropic"?"sk-ant-api03-...":"sk-...",value:S.llm.apiKey||"",style:{flex:1,padding:"10px 14px",borderRadius:"8px",border:"1px solid var(--border)",background:"var(--surfAlt)",color:"var(--text)",fontSize:"13px",fontFamily:"var(--mono)"},onInput:e=>{S.llm.apiKey=e.target.value.trim();S.llm.testStatus=null;S.llm.testMsg="";saveLLM();}});
+    const keyInput=h("input",{type:"password",id:"llm-key-input",placeholder:S.llm.provider==="anthropic"?"sk-ant-api03-...":"sk-...",value:S.llm.apiKey||"",style:{flex:1,padding:"10px 14px",borderRadius:"8px",border:"1px solid var(--border)",background:"var(--surfAlt)",color:"var(--text)",fontSize:"13px",fontFamily:"var(--mono)"}});
+    const updateKey=()=>{const v=document.getElementById("llm-key-input").value.trim();S.llm.apiKey=v;S.llm.testStatus=null;S.llm.testMsg="";saveLLM();render();};
+    keyInput.addEventListener("input",updateKey);
+    keyInput.addEventListener("paste",()=>setTimeout(updateKey,50));
+    keyInput.addEventListener("change",updateKey);
     keyRow.appendChild(keyInput);
     const showKeyBtn=h("button",{style:{padding:"10px 14px",borderRadius:"8px",border:"1px solid var(--border)",background:"var(--surfAlt)",color:"var(--textMid)",cursor:"pointer",fontSize:"14px",fontFamily:"inherit"},onClick:()=>{const inp=document.getElementById("llm-key-input");inp.type=inp.type==="password"?"text":"password";}});
     showKeyBtn.textContent="👁";showKeyBtn.title="Show/hide key";
