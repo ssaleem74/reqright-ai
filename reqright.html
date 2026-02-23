@@ -515,6 +515,7 @@ const S={
   showLLMSettings:false,
   llm:JSON.parse(localStorage.getItem("reqright_llm")||"null")||{provider:"anthropic",model:"claude-sonnet-4-5-20250929",apiKey:"",testStatus:null,testMsg:""},
   llmReview:null, // {reqId, original, suggested, changes, confidence, loading, error}
+  llmBatch:null, // {total, done, improved, failed, running, results, currentId}
 };
 
 function setState(updates){Object.assign(S,updates);render();}
@@ -1013,6 +1014,36 @@ function acceptLLM(){
 }
 
 function rejectLLM(){S.llmReview=null;render();}
+
+async function bulkLLMAI(threshold=80){
+  const targets=S.reqs.filter(r=>r.text.trim()&&analyze(r.text).score<threshold);
+  if(!targets.length){toast("No requirements below "+threshold+"%","success");return;}
+  S.llmBatch={total:targets.length,done:0,improved:0,failed:0,running:true,results:[]};
+  render();
+  for(const r of targets){
+    S.llmBatch.currentId=r.id;render();
+    try{
+      const result=await llmRewrite(r);
+      if(result&&result.text){
+        History.save();
+        const oldText=r.text;const oldScore=analyze(oldText).score;
+        r.text=result.text;r.modified=new Date().toISOString();
+        if(!r.history)r.history=[];
+        r.history.push({timestamp:new Date().toISOString(),field:"Statement (LLM Batch)",oldValue:oldText.substring(0,60)+(oldText.length>60?"…":""),newValue:r.text.substring(0,60)+(r.text.length>60?"…":""),author:"LLM ("+S.llm.model+")"});
+        const newScore=analyze(r.text).score;
+        S.llmBatch.improved++;
+        S.llmBatch.results.push({id:r.id,oldScore,newScore,status:"ok"});
+      }
+    }catch(e){
+      S.llmBatch.failed++;
+      S.llmBatch.results.push({id:r.id,oldScore:analyze(r.text).score,newScore:null,status:"error",msg:e.message});
+    }
+    S.llmBatch.done++;render();
+  }
+  S.llmBatch.running=false;S.llmBatch.currentId=null;
+  autoSave();render();
+  toast(`LLM batch: ${S.llmBatch.improved} improved, ${S.llmBatch.failed} failed of ${S.llmBatch.total}`,"success");
+}
 function doImport(){
   History.save();
   const parsed=parseDoc(S.importText);
@@ -2125,9 +2156,64 @@ function render(){
     const hdr=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"24px"}});
     hdr.appendChild(h("h2",{style:{fontSize:"20px",fontWeight:700}},"Bulk Quality Analysis"));
     const hbtns=h("div",{style:{display:"flex",gap:"8px"}});
-    hbtns.appendChild(h("button",{className:"btn btn-ai",style:{padding:"10px 24px",fontSize:"13px"},onClick:()=>{bulkAI();S.showBulkAI=false;}},"⚡ AI Fix All Below 80%"));
+    hbtns.appendChild(h("button",{className:"btn btn-ai",style:{padding:"10px 24px",fontSize:"13px"},onClick:()=>{bulkAI();S.showBulkAI=false;}},"⚡ Auto-Fix All Below 80%"));
+    // LLM batch button
+    const llmConfigured=S.llm.apiKey&&S.llm.apiKey.length>10;
+    if(llmConfigured){
+      const batchRunning=S.llmBatch&&S.llmBatch.running;
+      const llmBatchBtn=h("button",{style:{padding:"10px 24px",background:batchRunning?"var(--surfAlt)":"linear-gradient(135deg,#8b5cf6,#06b6d4)",color:"#fff",border:"none",borderRadius:"8px",fontSize:"13px",fontWeight:600,cursor:batchRunning?"not-allowed":"pointer",fontFamily:"inherit",opacity:batchRunning?0.6:1},disabled:batchRunning,onClick:()=>{if(!batchRunning)bulkLLMAI(80);}},batchRunning?"✨ Running...":"✨ LLM Fix All Below 80%");
+      hbtns.appendChild(llmBatchBtn);
+    }
     hbtns.appendChild(h("button",{className:"btn btn-sec",onClick:()=>{S.showBulkAI=false;render();}},"Close"));
     hdr.appendChild(hbtns);modal.appendChild(hdr);
+
+    // LLM batch progress panel
+    if(S.llmBatch){
+      const bp=h("div",{style:{background:"var(--surface)",borderRadius:"10px",padding:"16px",border:"1px solid var(--purple)33",marginBottom:"16px"}});
+      const bpHead=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}});
+      bpHead.appendChild(h("div",{style:{fontSize:"14px",fontWeight:600,color:"var(--purple)"}},S.llmBatch.running?"✨ LLM Batch Rewrite in Progress...":"✨ LLM Batch Rewrite Complete"));
+      bpHead.appendChild(h("div",{style:{fontSize:"12px",color:"var(--textMid)"}},S.llmBatch.done+" / "+S.llmBatch.total));
+      bp.appendChild(bpHead);
+
+      // Progress bar
+      const pct=S.llmBatch.total>0?Math.round(S.llmBatch.done/S.llmBatch.total*100):0;
+      const barBg=h("div",{style:{height:"8px",borderRadius:"4px",background:"var(--border)",overflow:"hidden",marginBottom:"12px"}});
+      barBg.appendChild(h("div",{style:{height:"100%",width:pct+"%",borderRadius:"4px",background:"linear-gradient(90deg,#8b5cf6,#06b6d4)",transition:"width .3s"}}));
+      bp.appendChild(barBg);
+
+      // Stats row
+      const stats=h("div",{style:{display:"flex",gap:"16px",marginBottom:"10px"}});
+      stats.appendChild(h("span",{style:{fontSize:"12px",color:"var(--success)"}},"✓ "+S.llmBatch.improved+" improved"));
+      stats.appendChild(h("span",{style:{fontSize:"12px",color:"var(--danger)"}},"✕ "+S.llmBatch.failed+" failed"));
+      if(S.llmBatch.running&&S.llmBatch.currentId){
+        stats.appendChild(h("span",{style:{fontSize:"12px",color:"var(--purple)"}},"⏳ Processing "+S.llmBatch.currentId+"..."));
+      }
+      bp.appendChild(stats);
+
+      // Results list (compact)
+      if(S.llmBatch.results.length>0){
+        const resList=h("div",{style:{maxHeight:"150px",overflowY:"auto"}});
+        S.llmBatch.results.forEach(res=>{
+          const row=h("div",{style:{display:"flex",alignItems:"center",gap:"8px",padding:"4px 0",fontSize:"12px"}});
+          row.appendChild(h("span",{style:{color:"var(--accent)",fontFamily:"var(--mono)",fontWeight:600,minWidth:"60px"}},res.id));
+          if(res.status==="ok"){
+            row.appendChild(h("span",{style:{color:"var(--textMid)"}},res.oldScore+"% → "+res.newScore+"%"));
+            const diff=res.newScore-res.oldScore;
+            row.appendChild(h("span",{style:{color:diff>0?"var(--success)":"var(--danger)",fontWeight:600}},(diff>0?"+":"")+diff+"%"));
+          } else {
+            row.appendChild(h("span",{style:{color:"var(--danger)"}},"Error: "+(res.msg||"failed")));
+          }
+          resList.appendChild(row);
+        });
+        bp.appendChild(resList);
+      }
+
+      // Clear button when done
+      if(!S.llmBatch.running){
+        bp.appendChild(h("button",{style:{marginTop:"8px",padding:"6px 14px",borderRadius:"6px",border:"1px solid var(--border)",background:"transparent",color:"var(--textMid)",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"},onClick:()=>{S.llmBatch=null;render();}},"✕ Dismiss"));
+      }
+      modal.appendChild(bp);
+    }
 
     let anyFails=false;
     S.reqs.forEach(r=>{
@@ -2140,7 +2226,13 @@ function render(){
       const sc=a.score>=80?"var(--success)":a.score>=60?"var(--warn)":"var(--danger)";
       lf.appendChild(h("span",{className:"badge",style:{background:sc+"22",color:sc}},a.score+"% ("+a.grade+")"));
       rh.appendChild(lf);
-      rh.appendChild(h("button",{className:"btn btn-sec",style:{fontSize:"12px",padding:"4px 12px"},onClick:()=>doAI(r.id)},"⚡ AI Fix"));
+      const rowBtns=h("div",{style:{display:"flex",gap:"4px"}});
+      rowBtns.appendChild(h("button",{className:"btn btn-sec",style:{fontSize:"12px",padding:"4px 12px"},onClick:()=>doAI(r.id)},"⚡ Auto-Fix"));
+      if(llmConfigured){
+        const lrb=h("button",{style:{padding:"4px 12px",borderRadius:"6px",border:"none",background:"linear-gradient(135deg,#8b5cf6,#06b6d4)",color:"#fff",fontSize:"12px",fontWeight:600,cursor:"pointer",fontFamily:"inherit"},onClick:()=>{S.showBulkAI=false;S.selId=r.id;S.view="editor";render();setTimeout(()=>doLLMAI(r.id),100);}});
+        lrb.textContent="✨ LLM";rowBtns.appendChild(lrb);
+      }
+      rh.appendChild(rowBtns);
       row.appendChild(rh);
       row.appendChild(h("p",{style:{fontSize:"13px",color:"var(--text)",marginBottom:"8px",lineHeight:"1.5"}},r.text||"(empty)"));
       const tags=h("div",{style:{display:"flex",flexWrap:"wrap",gap:"4px"}});
