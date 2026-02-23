@@ -513,7 +513,7 @@ const S={
   autoSaveKey:"reqright_autosave",
   // LLM settings
   showLLMSettings:false,
-  llm:JSON.parse(localStorage.getItem("reqright_llm")||"null")||{provider:"anthropic",model:"claude-sonnet-4-5-20250514",apiKey:"",testStatus:null,testMsg:""},
+  llm:JSON.parse(localStorage.getItem("reqright_llm")||"null")||{provider:"anthropic",model:"claude-sonnet-4-5-20250929",apiKey:"",testStatus:null,testMsg:""},
 };
 
 function setState(updates){Object.assign(S,updates);render();}
@@ -2098,7 +2098,7 @@ function render(){
       const active=S.llm.provider===p.k;
       const btn=h("button",{style:{flex:1,padding:"10px 16px",borderRadius:"8px",border:"1px solid "+(active?"var(--accent)":"var(--border)"),background:active?"var(--accent)11":"transparent",color:active?"var(--accent)":"var(--textMid)",cursor:"pointer",fontSize:"13px",fontWeight:active?600:400,fontFamily:"inherit",transition:"all .15s"},onClick:()=>{
         S.llm.provider=p.k;
-        S.llm.model=p.k==="anthropic"?"claude-sonnet-4-5-20250514":"gpt-4o";
+        S.llm.model=p.k==="anthropic"?"claude-sonnet-4-5-20250929":"gpt-4o";
         S.llm.testStatus=null;S.llm.testMsg="";saveLLM();render();
       }});
       btn.textContent=p.icon+" "+p.l;
@@ -2113,7 +2113,7 @@ function render(){
     const modelField=h("div",{style:{marginBottom:"16px"}});
     modelField.appendChild(h("label",{style:{display:"block",fontSize:"12px",fontWeight:600,color:"var(--textMid)",marginBottom:"6px",textTransform:"uppercase",letterSpacing:".05em"}},"Model"));
     const models=S.llm.provider==="anthropic"
-      ?[{k:"claude-sonnet-4-5-20250514",l:"Claude Sonnet 4.5 (recommended)"},{k:"claude-haiku-4-5-20251001",l:"Claude Haiku 4.5 (fast, cheap)"},{k:"claude-opus-4-5-20250929",l:"Claude Opus 4.5 (most capable)"}]
+      ?[{k:"claude-sonnet-4-5-20250929",l:"Claude Sonnet 4.5 (recommended)"},{k:"claude-haiku-4-5-20251001",l:"Claude Haiku 4.5 (fast, cheap)"},{k:"claude-opus-4-5-20250929",l:"Claude Opus 4.5 (most capable)"}]
       :[{k:"gpt-4o",l:"GPT-4o (recommended)"},{k:"gpt-4o-mini",l:"GPT-4o Mini (fast, cheap)"},{k:"gpt-4.1",l:"GPT-4.1 (latest)"}];
     const modelSel=h("select",{style:{width:"100%",padding:"10px 14px",borderRadius:"8px",border:"1px solid var(--border)",background:"var(--surfAlt)",color:"var(--text)",fontSize:"13px",fontFamily:"inherit",cursor:"pointer"},value:S.llm.model,onChange:e=>{S.llm.model=e.target.value;S.llm.testStatus=null;saveLLM();render();}});
     models.forEach(m=>{const opt=h("option",{value:m.k},m.l);if(S.llm.model===m.k)opt.selected=true;modelSel.appendChild(opt);});
