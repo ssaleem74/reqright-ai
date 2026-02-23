@@ -510,10 +510,51 @@ const S={
   commentText:"",
   ruleWeights:JSON.parse(localStorage.getItem("reqright_ruleWeights")||"null")||Object.fromEntries(RULES.map(r=>[r.id,1])),
   aiLoading:null,toast:null,
-  autoSaveKey:"reqright_autosave"
+  autoSaveKey:"reqright_autosave",
+  // LLM settings
+  showLLMSettings:false,
+  llm:JSON.parse(localStorage.getItem("reqright_llm")||"null")||{provider:"anthropic",model:"claude-sonnet-4-5-20250514",apiKey:"",testStatus:null,testMsg:""},
 };
 
 function setState(updates){Object.assign(S,updates);render();}
+function saveLLM(){localStorage.setItem("reqright_llm",JSON.stringify({provider:S.llm.provider,model:S.llm.model,apiKey:S.llm.apiKey}));}
+async function testLLMConnection(){
+  S.llm.testStatus="testing";S.llm.testMsg="";render();
+  try{
+    if(S.llm.provider==="anthropic"){
+      const resp=await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","x-api-key":S.llm.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+        body:JSON.stringify({model:S.llm.model,max_tokens:20,messages:[{role:"user",content:"Reply with only: OK"}]})
+      });
+      if(resp.ok){
+        const data=await resp.json();
+        const txt=(data.content&&data.content[0]&&data.content[0].text)||"";
+        S.llm.testStatus="ok";S.llm.testMsg="Model: "+S.llm.model+" — "+txt.trim();
+      } else {
+        const err=await resp.json().catch(()=>({error:{message:resp.statusText}}));
+        S.llm.testStatus="error";S.llm.testMsg=(err.error&&err.error.message)||"HTTP "+resp.status;
+      }
+    } else if(S.llm.provider==="openai"){
+      const resp=await fetch("https://api.openai.com/v1/chat/completions",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","Authorization":"Bearer "+S.llm.apiKey},
+        body:JSON.stringify({model:S.llm.model,max_tokens:20,messages:[{role:"user",content:"Reply with only: OK"}]})
+      });
+      if(resp.ok){
+        const data=await resp.json();
+        const txt=(data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content)||"";
+        S.llm.testStatus="ok";S.llm.testMsg="Model: "+S.llm.model+" — "+txt.trim();
+      } else {
+        const err=await resp.json().catch(()=>({error:{message:resp.statusText}}));
+        S.llm.testStatus="error";S.llm.testMsg=(err.error&&err.error.message)||"HTTP "+resp.status;
+      }
+    }
+  } catch(e){
+    S.llm.testStatus="error";S.llm.testMsg=e.message||"Network error — check your connection";
+  }
+  saveLLM();render();
+}
 
 // ─── UNDO/REDO SYSTEM ──────────────────────────────────────
 const History={
@@ -761,6 +802,7 @@ document.addEventListener("keydown",e=>{
     if(S.xlsxPreview){S.xlsxPreview=null;render();}
     if(S.showExport){S.showExport=false;render();}
     if(S.showBulkAI){S.showBulkAI=false;render();}
+    if(S.showLLMSettings){S.showLLMSettings=false;render();}
     if(S.showImport){S.showImport=false;render();}
   }
 });
@@ -2017,7 +2059,107 @@ function render(){
     overlay.appendChild(modal);app.appendChild(overlay);
   }
 
-  // ═══ HEADER ═══
+  // ═══ LLM SETTINGS MODAL ═══
+  if(S.showLLMSettings){
+    const overlay=h("div",{className:"modal-overlay",onClick:()=>{S.showLLMSettings=false;render();}});
+    const modal=h("div",{className:"modal",style:{width:"560px",maxHeight:"88vh",overflow:"auto",padding:0},onClick:e=>e.stopPropagation()});
+
+    // Header
+    const mHead=h("div",{style:{padding:"20px 24px 16px",borderBottom:"1px solid var(--border)"}});
+    const mTitle=h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}});
+    mTitle.appendChild(h("h2",{style:{fontSize:"18px",fontWeight:700}},"🤖 LLM Configuration"));
+    const closeBtn=h("button",{style:{background:"none",border:"none",color:"var(--textMid)",fontSize:"18px",cursor:"pointer",padding:"4px 8px"},onClick:()=>{S.showLLMSettings=false;render();}},"✕");
+    mTitle.appendChild(closeBtn);
+    mHead.appendChild(mTitle);
+    mHead.appendChild(h("p",{style:{color:"var(--textMid)",fontSize:"12px",marginTop:"4px"}},"Connect your own API key to enable smart rewrite, requirement generation, and AI-powered analysis. Your key is stored locally and never sent to our servers."));
+    modal.appendChild(mHead);
+
+    const mBody=h("div",{style:{padding:"20px 24px"}});
+
+    // Status banner
+    const configured=S.llm.apiKey&&S.llm.apiKey.length>10;
+    const statusBanner=h("div",{style:{padding:"12px 16px",borderRadius:"8px",marginBottom:"20px",border:"1px solid",borderColor:configured?(S.llm.testStatus==="ok"?"var(--success)":"var(--accent)"):"var(--border)",background:configured?(S.llm.testStatus==="ok"?"var(--success)11":"var(--accent)11"):"var(--surfAlt)"}});
+    if(!configured){
+      statusBanner.appendChild(h("div",{style:{fontSize:"13px",color:"var(--textMid)"}},"⚪ No API key configured — LLM features disabled. All core features work offline."));
+    } else if(S.llm.testStatus==="ok"){
+      statusBanner.appendChild(h("div",{style:{fontSize:"13px",color:"var(--success)"}},"🟢 Connected — LLM features enabled."));
+    } else if(S.llm.testStatus==="error"){
+      statusBanner.appendChild(h("div",{style:{fontSize:"13px",color:"var(--danger)"}},"🔴 Connection failed: "+(S.llm.testMsg||"Unknown error")));
+    } else {
+      statusBanner.appendChild(h("div",{style:{fontSize:"13px",color:"var(--accent)"}},"🔵 API key set — click Test Connection to verify."));
+    }
+    mBody.appendChild(statusBanner);
+
+    // Provider selector
+    const provField=h("div",{style:{marginBottom:"16px"}});
+    provField.appendChild(h("label",{style:{display:"block",fontSize:"12px",fontWeight:600,color:"var(--textMid)",marginBottom:"6px",textTransform:"uppercase",letterSpacing:".05em"}},"Provider"));
+    const provRow=h("div",{style:{display:"flex",gap:"8px"}});
+    [{k:"anthropic",l:"Anthropic Claude",icon:"🟣"},{k:"openai",l:"OpenAI",icon:"🟢"}].forEach(p=>{
+      const active=S.llm.provider===p.k;
+      const btn=h("button",{style:{flex:1,padding:"10px 16px",borderRadius:"8px",border:"1px solid "+(active?"var(--accent)":"var(--border)"),background:active?"var(--accent)11":"transparent",color:active?"var(--accent)":"var(--textMid)",cursor:"pointer",fontSize:"13px",fontWeight:active?600:400,fontFamily:"inherit",transition:"all .15s"},onClick:()=>{
+        S.llm.provider=p.k;
+        S.llm.model=p.k==="anthropic"?"claude-sonnet-4-5-20250514":"gpt-4o";
+        S.llm.testStatus=null;S.llm.testMsg="";saveLLM();render();
+      }});
+      btn.textContent=p.icon+" "+p.l;
+      btn.addEventListener("mouseenter",()=>{if(!active)btn.style.borderColor="var(--textMid)";});
+      btn.addEventListener("mouseleave",()=>{if(!active)btn.style.borderColor="var(--border)";});
+      provRow.appendChild(btn);
+    });
+    provField.appendChild(provRow);
+    mBody.appendChild(provField);
+
+    // Model selector
+    const modelField=h("div",{style:{marginBottom:"16px"}});
+    modelField.appendChild(h("label",{style:{display:"block",fontSize:"12px",fontWeight:600,color:"var(--textMid)",marginBottom:"6px",textTransform:"uppercase",letterSpacing:".05em"}},"Model"));
+    const models=S.llm.provider==="anthropic"
+      ?[{k:"claude-sonnet-4-5-20250514",l:"Claude Sonnet 4.5 (recommended)"},{k:"claude-haiku-4-5-20251001",l:"Claude Haiku 4.5 (fast, cheap)"},{k:"claude-opus-4-5-20250929",l:"Claude Opus 4.5 (most capable)"}]
+      :[{k:"gpt-4o",l:"GPT-4o (recommended)"},{k:"gpt-4o-mini",l:"GPT-4o Mini (fast, cheap)"},{k:"gpt-4.1",l:"GPT-4.1 (latest)"}];
+    const modelSel=h("select",{style:{width:"100%",padding:"10px 14px",borderRadius:"8px",border:"1px solid var(--border)",background:"var(--surfAlt)",color:"var(--text)",fontSize:"13px",fontFamily:"inherit",cursor:"pointer"},value:S.llm.model,onChange:e=>{S.llm.model=e.target.value;S.llm.testStatus=null;saveLLM();render();}});
+    models.forEach(m=>{const opt=h("option",{value:m.k},m.l);if(S.llm.model===m.k)opt.selected=true;modelSel.appendChild(opt);});
+    modelField.appendChild(modelSel);
+    mBody.appendChild(modelField);
+
+    // API Key input
+    const keyField=h("div",{style:{marginBottom:"20px"}});
+    keyField.appendChild(h("label",{style:{display:"block",fontSize:"12px",fontWeight:600,color:"var(--textMid)",marginBottom:"6px",textTransform:"uppercase",letterSpacing:".05em"}},"API Key"));
+    const keyRow=h("div",{style:{display:"flex",gap:"8px"}});
+    const keyInput=h("input",{type:"password",id:"llm-key-input",placeholder:S.llm.provider==="anthropic"?"sk-ant-api03-...":"sk-...",value:S.llm.apiKey||"",style:{flex:1,padding:"10px 14px",borderRadius:"8px",border:"1px solid var(--border)",background:"var(--surfAlt)",color:"var(--text)",fontSize:"13px",fontFamily:"var(--mono)"},onInput:e=>{S.llm.apiKey=e.target.value.trim();S.llm.testStatus=null;S.llm.testMsg="";saveLLM();}});
+    keyRow.appendChild(keyInput);
+    const showKeyBtn=h("button",{style:{padding:"10px 14px",borderRadius:"8px",border:"1px solid var(--border)",background:"var(--surfAlt)",color:"var(--textMid)",cursor:"pointer",fontSize:"14px",fontFamily:"inherit"},onClick:()=>{const inp=document.getElementById("llm-key-input");inp.type=inp.type==="password"?"text":"password";}});
+    showKeyBtn.textContent="👁";showKeyBtn.title="Show/hide key";
+    keyRow.appendChild(showKeyBtn);
+    keyField.appendChild(keyRow);
+    keyField.appendChild(h("div",{style:{fontSize:"11px",color:"var(--textDim)",marginTop:"6px"}},S.llm.provider==="anthropic"?"Get your key at console.anthropic.com → API Keys":"Get your key at platform.openai.com → API keys"));
+    mBody.appendChild(keyField);
+
+    // Action buttons
+    const actions=h("div",{style:{display:"flex",gap:"10px",alignItems:"center"}});
+    const testBtn=h("button",{className:"btn btn-pri",style:{padding:"10px 20px",opacity:configured?1:.5,cursor:configured?"pointer":"not-allowed"},onClick:()=>{if(configured)testLLMConnection();}});
+    testBtn.textContent=S.llm.testStatus==="testing"?"⏳ Testing...":"🔌 Test Connection";
+    actions.appendChild(testBtn);
+    if(configured){
+      const clearBtn=h("button",{className:"btn btn-sec",style:{padding:"10px 16px",borderColor:"var(--danger)44",color:"var(--danger)"},onClick:()=>{S.llm.apiKey="";S.llm.testStatus=null;S.llm.testMsg="";saveLLM();render();}});
+      clearBtn.textContent="🗑 Clear Key";
+      actions.appendChild(clearBtn);
+    }
+    mBody.appendChild(actions);
+
+    // Privacy note
+    const privacy=h("div",{style:{marginTop:"20px",padding:"12px 16px",borderRadius:"8px",background:"var(--surfAlt)",border:"1px solid var(--border)"}});
+    privacy.appendChild(h("div",{style:{fontSize:"12px",fontWeight:600,color:"var(--textMid)",marginBottom:"4px"}},"🔒 Privacy"));
+    privacy.appendChild(h("div",{style:{fontSize:"11px",color:"var(--textDim)",lineHeight:"1.6"}},"Your API key is stored in your browser's localStorage only. It is never included in JSON exports, never sent to ReqRight servers (there are none), and never shared. When you use LLM features, your requirement text is sent directly from your browser to the API provider you selected."));
+    mBody.appendChild(privacy);
+
+    // Cost estimate
+    const cost=h("div",{style:{marginTop:"12px",padding:"12px 16px",borderRadius:"8px",background:"var(--surfAlt)",border:"1px solid var(--border)"}});
+    cost.appendChild(h("div",{style:{fontSize:"12px",fontWeight:600,color:"var(--textMid)",marginBottom:"4px"}},"💰 Estimated Cost"));
+    cost.appendChild(h("div",{style:{fontSize:"11px",color:"var(--textDim)",lineHeight:"1.6"}},"Single rewrite ≈ $0.005 · Batch rewrite (30 reqs) ≈ $0.15 · Decomposition ≈ $0.02. Costs depend on your provider and model. Haiku/Mini models are 5–10× cheaper."));
+    mBody.appendChild(cost);
+
+    modal.appendChild(mBody);
+    overlay.appendChild(modal);app.appendChild(overlay);
+  }
   const header=h("header",{className:"header"});
 
   // ── Row 1: Logo + Actions ──
@@ -2088,6 +2230,14 @@ function render(){
   }
   hActions.appendChild(fileWrap);
   hActions.appendChild(h("button",{className:"btn btn-sec",style:{borderColor:"#a78bfa44",color:"var(--purple)"},onClick:()=>{S.showBulkAI=true;render();}},"⚡ AI"));
+  
+  // LLM Settings button
+  const llmConfigured=S.llm.apiKey&&S.llm.apiKey.length>10;
+  const llmBtn=h("button",{className:"btn btn-sec",style:{borderColor:llmConfigured?"#10b98144":"var(--border)",color:llmConfigured?"var(--success)":"var(--textMid)",position:"relative"},onClick:()=>{S.showLLMSettings=true;render();}});
+  llmBtn.appendChild(h("span",{},"🤖"));
+  llmBtn.appendChild(h("span",{style:{fontSize:"11px",marginLeft:"4px"}},"LLM"));
+  if(llmConfigured){llmBtn.appendChild(h("span",{style:{position:"absolute",top:"-2px",right:"-2px",width:"8px",height:"8px",borderRadius:"50%",background:"var(--success)",border:"2px solid var(--bg)"}},"")); }
+  hActions.appendChild(llmBtn);
   
   // Theme toggle button
   const isDark=!document.documentElement.classList.contains("light");
