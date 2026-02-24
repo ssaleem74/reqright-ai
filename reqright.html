@@ -2415,7 +2415,10 @@ function render(){
     descField.appendChild(h("label",{style:{display:"block",fontSize:"12px",fontWeight:600,color:"var(--textMid)",marginBottom:"6px",textTransform:"uppercase",letterSpacing:".05em"}},"Description"));
     const descTA=h("textarea",{id:"llm-gen-desc",placeholder:"e.g. I need the sensor to work in cold weather down to -40 degrees, and it should report temperature every 5 seconds with good accuracy...",style:{width:"100%",minHeight:"100px",padding:"12px 14px",borderRadius:"8px",border:"1px solid var(--border)",background:"var(--surfAlt)",color:"var(--text)",fontSize:"13px",fontFamily:"inherit",lineHeight:"1.6",resize:"vertical"}});
     descTA.value=S.llmGen.description||"";
-    descTA.addEventListener("input",e=>{S.llmGen.description=e.target.value;});
+    descTA.addEventListener("input",e=>{S.llmGen.description=e.target.value;
+      const gb=document.getElementById("llm-gen-btn");if(gb){const ok=S.llmGen.description&&S.llmGen.description.trim().length>5;gb.disabled=!ok;gb.style.background=ok?"linear-gradient(135deg,#8b5cf6,#06b6d4)":"var(--border)";gb.style.color=ok?"#fff":"var(--textDim)";gb.style.cursor=ok?"pointer":"not-allowed";}
+    });
+    descTA.addEventListener("paste",()=>setTimeout(()=>{S.llmGen.description=document.getElementById("llm-gen-desc").value;render();},50));
     descField.appendChild(descTA);mBody.appendChild(descField);
 
     // Count selector
@@ -2429,8 +2432,9 @@ function render(){
 
     // Generate button
     const hasDesc=S.llmGen.description&&S.llmGen.description.trim().length>5;
-    const genBtn=h("button",{style:{padding:"10px 24px",borderRadius:"8px",border:"none",background:hasDesc&&!S.llmGen.loading?"linear-gradient(135deg,#8b5cf6,#06b6d4)":"var(--border)",color:hasDesc?"#fff":"var(--textDim)",fontSize:"14px",fontWeight:600,cursor:hasDesc&&!S.llmGen.loading?"pointer":"not-allowed",fontFamily:"inherit",marginBottom:"16px"},disabled:!hasDesc||S.llmGen.loading,onClick:async()=>{
-      if(!hasDesc||S.llmGen.loading)return;
+    const genBtn=h("button",{id:"llm-gen-btn",style:{padding:"10px 24px",borderRadius:"8px",border:"none",background:hasDesc&&!S.llmGen.loading?"linear-gradient(135deg,#8b5cf6,#06b6d4)":"var(--border)",color:hasDesc?"#fff":"var(--textDim)",fontSize:"14px",fontWeight:600,cursor:hasDesc&&!S.llmGen.loading?"pointer":"not-allowed",fontFamily:"inherit",marginBottom:"16px"},disabled:!hasDesc||S.llmGen.loading,onClick:async()=>{
+      const desc=S.llmGen.description&&S.llmGen.description.trim().length>5;
+      if(!desc||S.llmGen.loading)return;
       S.llmGen.loading=true;S.llmGen.error=null;S.llmGen.results=null;render();
       try{const r=await llmGenerate(S.llmGen.description,S.llmGen.count);S.llmGen.results=Array.isArray(r)?r:[r];}
       catch(e){S.llmGen.error=e.message||"Generation failed";}
