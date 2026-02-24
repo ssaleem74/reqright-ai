@@ -74,6 +74,13 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent)!important;out
 
 .ai-panel{background:linear-gradient(135deg,#4c1d9544,#0c4a6e44);border-radius:14px;padding:20px;border:1px solid #a78bfa44;margin-bottom:14px;position:relative;overflow:hidden;}
 .ai-panel .bg-icon{position:absolute;top:-20px;right:-20px;font-size:120px;opacity:.04;color:var(--purple);}
+.ai-toolbar{display:flex;align-items:center;gap:8px;padding:12px 16px;background:linear-gradient(135deg,#4c1d9522,#0c4a6e22);border-radius:10px;border:1px solid #a78bfa33;margin-bottom:14px;flex-wrap:wrap;}
+.ai-toolbar .ai-btn{padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--textMid);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;display:flex;align-items:center;gap:6px;white-space:nowrap;}
+.ai-toolbar .ai-btn:hover{background:var(--card);border-color:var(--accent)44;}
+.ai-toolbar .ai-btn:disabled{opacity:.5;cursor:not-allowed;}
+.ai-toolbar .ai-btn.llm{background:linear-gradient(135deg,#8b5cf6,#06b6d4);color:#fff;border:none;}
+.ai-toolbar .ai-btn.llm:hover{filter:brightness(1.1);}
+.ai-toolbar .ai-btn-badge{font-size:10px;padding:1px 6px;border-radius:8px;font-weight:700;line-height:1.4;min-width:16px;text-align:center;}
 .success-panel{background:#064e3b33;border-radius:14px;padding:16px;border:1px solid #10b98133;margin-bottom:14px;display:flex;align-items:center;gap:12px;}
 
 .toast{position:fixed;top:20px;right:20px;z-index:9999;padding:12px 24px;border-radius:10px;color:#fff;font-size:14px;font-weight:500;box-shadow:0 8px 32px rgba(0,0,0,.5);animation:slideIn .3s ease;display:flex;align-items:center;gap:8px;}
@@ -519,6 +526,9 @@ const S={
   llmGen:null, // {description, count, loading, error, results}
   llmDecomp:null, // {reqId, loading, error, results}
   llmSuggest:null, // {reqId, loading, error, risks, decisions}
+  showAbout:false,
+  showPatterns:false,
+  showCreateDD:false,
 };
 
 function setState(updates){Object.assign(S,updates);render();}
@@ -809,6 +819,7 @@ document.addEventListener("keydown",e=>{
     if(S.showBulkAI){S.showBulkAI=false;render();}
     if(S.showLLMSettings){S.showLLMSettings=false;render();}
     if(S.llmGen&&!S.llmGen.loading){S.llmGen=null;render();}
+    if(S.showAbout){S.showAbout=false;render();}
     if(S.showImport){S.showImport=false;render();}
   }
 });
@@ -2638,27 +2649,62 @@ function render(){
     modal.appendChild(mBody);overlay.appendChild(modal);app.appendChild(overlay);
   }
 
+  // ═══ ABOUT POPUP ═══
+  const llmConfigured=S.llm.apiKey&&S.llm.apiKey.length>10;
+  if(S.showAbout){
+    const overlay=h("div",{className:"modal-overlay",onClick:()=>{S.showAbout=false;render();}});
+    const modal=h("div",{className:"modal",style:{width:"420px",padding:0},onClick:e=>e.stopPropagation()});
+    const aHead=h("div",{style:{padding:"24px 24px 16px",textAlign:"center",borderBottom:"1px solid var(--border)"}});
+    const aLogo=h("div",{style:{width:"64px",height:"64px",borderRadius:"16px",background:"linear-gradient(135deg,var(--accent),var(--purple))",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:"20px",fontWeight:800,color:"#fff",position:"relative",marginBottom:"12px"}});
+    aLogo.textContent="RR";
+    const aiBadge=h("span",{style:{position:"absolute",bottom:"-4px",right:"-4px",fontSize:"8px",padding:"2px 5px",borderRadius:"6px",background:"linear-gradient(135deg,#8b5cf6,#06b6d4)",color:"#fff",fontWeight:700,letterSpacing:".03em"}},"AI");
+    aLogo.appendChild(aiBadge);
+    aHead.appendChild(aLogo);
+    aHead.appendChild(h("div",{style:{fontSize:"22px",fontWeight:700,letterSpacing:"-0.02em"}},"ReqRight AI"));
+    aHead.appendChild(h("div",{style:{fontSize:"12px",color:"var(--textDim)",marginTop:"4px"}},"Systems Engineering Workbench"));
+    modal.appendChild(aHead);
+    const aBody=h("div",{style:{padding:"20px 24px"}});
+    const aRows=[["Standard","INCOSE GtWR v4 · 42 Rules"],["Quality Engine","ISO/IEC/IEEE 29148 · 15288"],["LLM Status",llmConfigured?"🟢 Connected ("+S.llm.model+")":"⚪ Not configured"],["Version","3.0-AI"],["License","MIT — Free & Open Source"],["Privacy","100% offline-first · No servers · No telemetry"]];
+    aRows.forEach(([k,v])=>{
+      const r=h("div",{style:{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid var(--border)11",fontSize:"13px"}});
+      r.appendChild(h("span",{style:{color:"var(--textMid)",fontWeight:600}},k));
+      r.appendChild(h("span",{style:{color:"var(--text)",textAlign:"right",maxWidth:"260px"}},v));
+      aBody.appendChild(r);
+    });
+    const aLinks=h("div",{style:{display:"flex",gap:"8px",marginTop:"16px",justifyContent:"center"}});
+    aLinks.appendChild(h("a",{href:"https://github.com/ssaleem74/reqright-ai",target:"_blank",style:{padding:"8px 16px",borderRadius:"8px",border:"1px solid var(--border)",color:"var(--accent)",textDecoration:"none",fontSize:"12px",fontWeight:600}},"GitHub"));
+    aLinks.appendChild(h("a",{href:"https://github.com/ssaleem74/reqright-ai#readme",target:"_blank",style:{padding:"8px 16px",borderRadius:"8px",border:"1px solid var(--border)",color:"var(--textMid)",textDecoration:"none",fontSize:"12px",fontWeight:600}},"Documentation"));
+    aBody.appendChild(aLinks);
+    modal.appendChild(aBody);
+    overlay.appendChild(modal);app.appendChild(overlay);
+  }
+
   const header=h("header",{className:"header"});
 
   // ── Row 1: Logo + Actions ──
   const headerTop=h("div",{className:"header-top"});
-  const logo=h("div",{style:{display:"flex",alignItems:"center",gap:"14px"}});
-  logo.appendChild(h("div",{style:{width:"38px",height:"38px",borderRadius:"10px",background:"linear-gradient(135deg,var(--accent),var(--purple))",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"15px",fontWeight:800}},"RR"));
-  const logoText=h("div",{});
-  logoText.appendChild(h("div",{style:{fontSize:"16px",fontWeight:700,letterSpacing:"-0.02em"}},"ReqRight"));
-  logoText.appendChild(h("div",{style:{fontSize:"11px",color:"var(--textDim)",marginTop:"1px"}},"Systems Engineering Workbench · INCOSE GtWR v4 · 42 Rules"));
-  logo.appendChild(logoText);headerTop.appendChild(logo);
+
+  // Logo: taller, spans both rows visually, clickable, AI badge
+  const logo=h("div",{style:{display:"flex",alignItems:"center",gap:"12px",cursor:"pointer"},onClick:()=>{S.showAbout=true;render();}});
+  const logoIcon=h("div",{style:{width:"44px",height:"44px",borderRadius:"12px",background:"linear-gradient(135deg,var(--accent),var(--purple))",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"16px",fontWeight:800,color:"#fff",position:"relative",flexShrink:0}});
+  logoIcon.textContent="RR";
+  const logoAI=h("span",{style:{position:"absolute",bottom:"-3px",right:"-3px",fontSize:"7px",padding:"1px 4px",borderRadius:"4px",background:"linear-gradient(135deg,#8b5cf6,#06b6d4)",color:"#fff",fontWeight:700,letterSpacing:".03em",lineHeight:"1.4"}});
+  logoAI.textContent="AI";
+  logoIcon.appendChild(logoAI);
+  logo.appendChild(logoIcon);
+  logo.appendChild(h("div",{style:{fontSize:"16px",fontWeight:700,letterSpacing:"-0.02em"}},"ReqRight"));
+  headerTop.appendChild(logo);
 
   const reqCount=S.reqs.length;
   const glossCount=S.glossary.length;
   const decCount=S.decisions.length;
   const riskCount=S.risks.length;
 
-  const hActions=h("div",{style:{display:"flex",gap:"6px",alignItems:"center"}});
+  const hActions=h("div",{style:{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}});
 
-  // Reference tabs (moved from nav to save space)
+  // Group 1: Reference (V&V, Rules, Glossary)
   const refTabs=[{k:"vv",l:"✓ V&V"},{k:"rules",l:"⚙ Rules"},{k:"glossary",l:"📖 Glossary",c:glossCount}];
-  const refGroup=h("div",{style:{display:"flex",gap:"2px",background:"var(--surface)",borderRadius:"8px",padding:"2px",border:"1px solid var(--border)",marginRight:"4px"}});
+  const refGroup=h("div",{style:{display:"flex",gap:"2px",background:"var(--surface)",borderRadius:"8px",padding:"2px",border:"1px solid var(--border)"}});
   refTabs.forEach(t=>{
     const btn=h("button",{style:{padding:"5px 10px",borderRadius:"6px",border:"none",cursor:"pointer",fontSize:"12px",fontWeight:S.view===t.k?600:500,background:S.view===t.k?"var(--accent)":"transparent",color:S.view===t.k?"var(--bg)":"var(--textMid)",transition:"all .15s",whiteSpace:"nowrap"},onClick:()=>setState({view:t.k})});
     btn.appendChild(document.createTextNode(t.l));
@@ -2669,37 +2715,50 @@ function render(){
   });
   hActions.appendChild(refGroup);
 
-  // Global search button
+  // Group 2: Search
   const searchBtn=h("button",{className:"btn btn-sec",style:{borderColor:"var(--border)",display:"flex",alignItems:"center",gap:"6px",padding:"6px 12px"},onClick:()=>{S.showSearch=true;S.globalSearchQ="";render();setTimeout(()=>document.getElementById("global-search-input")?.focus(),50);}});
   searchBtn.appendChild(h("span",{style:{fontSize:"14px"}},"🔍"));
   searchBtn.appendChild(h("span",{style:{fontSize:"11px",color:"var(--textDim)",fontFamily:"var(--mono)"}},"⌘K"));
   hActions.appendChild(searchBtn);
-  hActions.appendChild(h("button",{className:"btn btn-pri",onClick:addReq},"+ New"));
-  // LLM Generate button
-  if(S.llm.apiKey&&S.llm.apiKey.length>10){
-    const genBtn=h("button",{style:{padding:"6px 12px",borderRadius:"8px",border:"none",background:"linear-gradient(135deg,#8b5cf6,#06b6d4)",color:"#fff",fontSize:"12px",fontWeight:600,cursor:"pointer",fontFamily:"inherit"},onClick:()=>{S.llmGen={description:"",count:1,loading:false,error:null,results:null};render();}});
-    genBtn.textContent="✨ Generate";
-    hActions.appendChild(genBtn);
-  }
-  hActions.appendChild(h("button",{className:"btn btn-sec",style:{borderColor:"#f59e0b44",color:"#f59e0b"},onClick:()=>{S.showTemplates=true;render();}},"📋 Templates"));
 
-  // File dropdown (Save/Load/Export consolidated)
+  // Group 3: Create dropdown (+ New, ✨ Generate, 📋 Templates)
+  const createWrap=h("div",{style:{position:"relative"}});
+  const createBtn=h("button",{className:"btn btn-pri",style:{display:"flex",alignItems:"center",gap:"4px"},onClick:()=>{S.showCreateDD=!S.showCreateDD;render();}});
+  createBtn.textContent="+ New ▾";
+  createWrap.appendChild(createBtn);
+  if(S.showCreateDD){
+    const cdd=h("div",{style:{position:"absolute",top:"100%",left:0,marginTop:"4px",background:"var(--card)",border:"1px solid var(--border)",borderRadius:"10px",padding:"4px",minWidth:"220px",boxShadow:"0 12px 40px rgba(0,0,0,.5)",zIndex:200}});
+    [{l:"📝 Empty Requirement",fn:()=>{addReq();S.showCreateDD=false;}},
+     {l:"✨ From Description (AI)",ai:true,fn:()=>{S.llmGen={description:"",count:1,loading:false,error:null,results:null};S.showCreateDD=false;render();}},
+     {l:"📋 From Template",fn:()=>{S.showTemplates=true;S.showCreateDD=false;render();}}
+    ].forEach(item=>{
+      const btn=h("button",{style:{display:"flex",width:"100%",padding:"10px 16px",border:"none",background:"transparent",color:item.ai&&!llmConfigured?"var(--textDim)":"var(--text)",fontSize:"13px",textAlign:"left",cursor:item.ai&&!llmConfigured?"not-allowed":"pointer",borderRadius:"6px",fontFamily:"inherit",fontWeight:500,alignItems:"center",gap:"8px"},onClick:()=>{if(item.ai&&!llmConfigured){toast("Configure LLM first (🤖 button)","danger");S.showCreateDD=false;render();return;}item.fn();}});
+      btn.textContent=item.l;
+      if(item.ai&&llmConfigured)btn.style.background="linear-gradient(135deg,#8b5cf611,#06b6d411)";
+      btn.addEventListener("mouseenter",()=>{if(!(item.ai&&!llmConfigured))btn.style.background=item.ai?"linear-gradient(135deg,#8b5cf622,#06b6d422)":"var(--surfAlt)";});
+      btn.addEventListener("mouseleave",()=>btn.style.background=item.ai&&llmConfigured?"linear-gradient(135deg,#8b5cf611,#06b6d411)":"transparent");
+      cdd.appendChild(btn);
+    });
+    createWrap.appendChild(cdd);
+    // Close on outside click
+    setTimeout(()=>{const closer=e=>{if(!createWrap.contains(e.target)){S.showCreateDD=false;render();document.removeEventListener("click",closer);}};document.addEventListener("click",closer);},10);
+  }
+  hActions.appendChild(createWrap);
+
+  // Group 4: File dropdown
   const fileWrap=h("div",{style:{position:"relative"}});
   fileWrap.appendChild(h("button",{className:"btn btn-sec",style:{borderColor:"#10b98144",color:"var(--success)"},onClick:()=>{S.showExport=!S.showExport;render();}},"📁 File ▾"));
   if(S.showExport){
     const dd=h("div",{style:{position:"absolute",top:"100%",right:0,marginTop:"4px",background:"var(--card)",border:"1px solid var(--border)",borderRadius:"10px",padding:"4px",minWidth:"200px",boxShadow:"0 12px 40px rgba(0,0,0,.5)",zIndex:200}});
-    // Save
     const saveItem=h("button",{style:{display:"block",width:"100%",padding:"10px 16px",border:"none",background:"transparent",color:"var(--success)",fontSize:"13px",textAlign:"left",cursor:"pointer",borderRadius:"6px",fontFamily:"inherit",fontWeight:600},onClick:()=>{exportJSON();S.showExport=false;render();}},"💾 Save Project");
     saveItem.addEventListener("mouseenter",()=>saveItem.style.background="var(--surfAlt)");saveItem.addEventListener("mouseleave",()=>saveItem.style.background="transparent");
     dd.appendChild(saveItem);
-    // Load
     const loadLabel=h("label",{style:{display:"block",padding:"10px 16px",color:"var(--accent)",fontSize:"13px",cursor:"pointer",borderRadius:"6px",fontWeight:600}});
     loadLabel.textContent="📂 Load Project";
     loadLabel.addEventListener("mouseenter",()=>loadLabel.style.background="var(--surfAlt)");loadLabel.addEventListener("mouseleave",()=>loadLabel.style.background="transparent");
     loadLabel.appendChild(h("input",{type:"file",accept:".json,.txt,.csv,.tsv,.md,.xlsx,.xls",style:{display:"none"},onChange:e=>{const f=e.target.files[0];if(f){const ext=f.name.split(".").pop().toLowerCase();importFile(f,ext==="json"?"json":(ext==="xlsx"||ext==="xls")?"xlsx":(ext==="csv"||ext==="tsv")?"csv":"text");}e.target.value="";S.showExport=false;}}));
     dd.appendChild(loadLabel);
     dd.appendChild(h("div",{style:{borderTop:"1px solid var(--border)",margin:"4px 0"}}));
-    // Exports
     [{l:"📄 Export Full Report (PDF)",fn:()=>{S.showReportCfg=true;S.showExport=false;render();}},{l:"📊 Export CSV",fn:exportCSV},{l:"🔗 Export ReqIF (DOORS)",fn:exportReqIF},{l:"💾 Export JSON Archive",fn:exportJSON}].forEach(({l,fn})=>{
       const item=h("button",{style:{display:"block",width:"100%",padding:"10px 16px",border:"none",background:"transparent",color:"var(--text)",fontSize:"13px",textAlign:"left",cursor:"pointer",borderRadius:"6px",fontFamily:"inherit"},onClick:()=>{fn();S.showExport=false;render();}},l);
       item.addEventListener("mouseenter",()=>item.style.background="var(--surfAlt)");item.addEventListener("mouseleave",()=>item.style.background="transparent");
@@ -2713,25 +2772,26 @@ function render(){
     dd.appendChild(impLabel);fileWrap.appendChild(dd);
   }
   hActions.appendChild(fileWrap);
-  hActions.appendChild(h("button",{className:"btn btn-sec",style:{borderColor:"#a78bfa44",color:"var(--purple)"},onClick:()=>{S.showBulkAI=true;render();}},"⚡ AI"));
-  
-  // LLM Settings button
-  const llmConfigured=S.llm.apiKey&&S.llm.apiKey.length>10;
-  const llmBtn=h("button",{className:"btn btn-sec",style:{borderColor:llmConfigured?"#10b98144":"var(--border)",color:llmConfigured?"var(--success)":"var(--textMid)",position:"relative"},onClick:()=>{S.showLLMSettings=true;render();}});
-  llmBtn.appendChild(h("span",{},"🤖"));
-  llmBtn.appendChild(h("span",{style:{fontSize:"11px",marginLeft:"4px"}},"LLM"));
-  if(llmConfigured){llmBtn.appendChild(h("span",{style:{position:"absolute",top:"-2px",right:"-2px",width:"8px",height:"8px",borderRadius:"50%",background:"var(--success)",border:"2px solid var(--bg)"}},"")); }
-  hActions.appendChild(llmBtn);
-  
-  // Theme toggle button
+
+  // Group 5: Tools (AI bulk, LLM settings)
+  const toolGroup=h("div",{style:{display:"flex",gap:"2px",background:"var(--surface)",borderRadius:"8px",padding:"2px",border:"1px solid var(--border)"}});
+  const bulkAIBtn=h("button",{style:{padding:"5px 10px",borderRadius:"6px",border:"none",cursor:"pointer",fontSize:"12px",fontWeight:500,background:"transparent",color:"var(--purple)",transition:"all .15s",whiteSpace:"nowrap"},onClick:()=>{S.showBulkAI=true;render();}});
+  bulkAIBtn.textContent="⚡ AI";
+  bulkAIBtn.addEventListener("mouseenter",()=>bulkAIBtn.style.background="var(--card)");
+  bulkAIBtn.addEventListener("mouseleave",()=>bulkAIBtn.style.background="transparent");
+  toolGroup.appendChild(bulkAIBtn);
+  const llmSettBtn=h("button",{style:{padding:"5px 10px",borderRadius:"6px",border:"none",cursor:"pointer",fontSize:"12px",fontWeight:500,background:"transparent",color:llmConfigured?"var(--success)":"var(--textMid)",transition:"all .15s",whiteSpace:"nowrap",position:"relative"},onClick:()=>{S.showLLMSettings=true;render();}});
+  llmSettBtn.textContent="🤖 LLM";
+  if(llmConfigured){llmSettBtn.appendChild(h("span",{style:{position:"absolute",top:"-1px",right:"-1px",width:"7px",height:"7px",borderRadius:"50%",background:"var(--success)",border:"1.5px solid var(--bg)"}},"")); }
+  llmSettBtn.addEventListener("mouseenter",()=>llmSettBtn.style.background="var(--card)");
+  llmSettBtn.addEventListener("mouseleave",()=>llmSettBtn.style.background="transparent");
+  toolGroup.appendChild(llmSettBtn);
+  hActions.appendChild(toolGroup);
+
+  // Theme toggle
   const isDark=!document.documentElement.classList.contains("light");
-  const themeBtn=h("button",{className:"btn btn-sec",style:{borderColor:"var(--border)",padding:"8px 12px",fontSize:"16px"},onClick:toggleTheme,title:isDark?"Switch to Light Mode":"Switch to Dark Mode"},isDark?"☀️":"🌙");
-  hActions.appendChild(themeBtn);
-  
-  // Help button
-  const helpBtn=h("a",{href:"https://github.com/ssaleem74/reqright#readme",target:"_blank",className:"btn btn-sec",style:{borderColor:"#38bdf844",color:"var(--accent)",textDecoration:"none",display:"inline-flex",alignItems:"center"}},"?");
-  hActions.appendChild(helpBtn);
-  
+  hActions.appendChild(h("button",{className:"btn btn-sec",style:{borderColor:"var(--border)",padding:"8px 12px",fontSize:"16px"},onClick:toggleTheme,title:isDark?"Switch to Light Mode":"Switch to Dark Mode"},isDark?"☀️":"🌙"));
+
   headerTop.appendChild(hActions);
   header.appendChild(headerTop);
 
@@ -3061,52 +3121,92 @@ function render(){
       const ta=h("textarea",{className:"input",style:{height:"auto",lineHeight:"1.7",resize:"vertical",fontSize:"15px",fontFamily:"'DM Sans',system-ui"},rows:4,value:cur.text,placeholder:'e.g., "When in operational mode, the Navigation_System shall compute position within ±10 m accuracy."',onInput:e=>updateReqSilent(cur.id,{text:e.target.value})});
       edCard.appendChild(ta);
 
-      const patRow=h("div",{style:{marginTop:"10px"}});
-      patRow.appendChild(h("div",{className:"label",style:{marginBottom:"4px"}},"Apply Pattern"));
-      const patBtns=h("div",{style:{display:"flex",gap:"4px",flexWrap:"wrap"}});
-      PATTERNS.forEach(p=>patBtns.appendChild(h("button",{style:{padding:"4px 10px",borderRadius:"5px",border:"1px solid var(--border)",background:"var(--surface)",color:"var(--textMid)",fontSize:"12px",cursor:"pointer",fontFamily:"inherit",transition:"all .15s"},onClick:()=>{updateReq(cur.id,{text:p.t});}},p.nm)));
-      patRow.appendChild(patBtns);edCard.appendChild(patRow);
+      // ═══ PATTERNS (collapsible) ═══
+      const patWrap=h("div",{style:{marginTop:"10px"}});
+      const patToggle=h("button",{style:{padding:"4px 10px",borderRadius:"6px",border:"1px solid var(--border)",background:"transparent",color:"var(--textDim)",fontSize:"11px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"4px"},onClick:()=>{S.showPatterns=!S.showPatterns;render();}});
+      patToggle.textContent=(S.showPatterns?"▾":"▸")+" 📝 Patterns";
+      patWrap.appendChild(patToggle);
+      if(S.showPatterns){
+        const patBtns=h("div",{style:{display:"flex",gap:"4px",flexWrap:"wrap",marginTop:"8px"}});
+        PATTERNS.forEach(p=>patBtns.appendChild(h("button",{style:{padding:"4px 10px",borderRadius:"5px",border:"1px solid var(--border)",background:"var(--surface)",color:"var(--textMid)",fontSize:"12px",cursor:"pointer",fontFamily:"inherit",transition:"all .15s"},onClick:()=>{updateReq(cur.id,{text:p.t});}},p.nm)));
+        patWrap.appendChild(patBtns);
+      }
+      edCard.appendChild(patWrap);
       center.appendChild(edCard);
 
-      // ═══ AI IMPROVE PANEL (PROMINENT) ═══
-      const aiPanel=h("div",{id:"ai-panel",className:"ai-panel",style:{display:cur.text.trim()&&curA&&curA.failed>0?"block":"none"}});
-      aiPanel.appendChild(h("div",{className:"bg-icon"},"⚡"));
-      const aiTop=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}});
-      const aiInfo=h("div",{className:"ai-info"});
-      aiInfo.appendChild(h("div",{style:{fontSize:"15px",fontWeight:700,color:"var(--purple)",marginBottom:"4px"}},"⚡ AI Requirement Improver"));
-      aiInfo.appendChild(h("div",{style:{fontSize:"12px",color:"var(--textMid)"}},curA?(curA.failed+" INCOSE violation"+(curA.failed!==1?"s":"")+" detected — AI can fix: "+curA.results.filter(r=>!r.pass).map(r=>r.id).join(", ")):""));
-      aiTop.appendChild(aiInfo);
-      const aiBtns=h("div",{style:{display:"flex",gap:"8px",alignItems:"center"}});
-      const aiBtn=h("button",{className:"btn btn-ai",disabled:S.aiLoading===cur.id,onClick:()=>doAI(cur.id)},S.aiLoading===cur.id?"⚡ Improving...":"⚡ Auto-Fix");
-      aiBtns.appendChild(aiBtn);
-      // LLM rewrite button (only if API key configured)
-      if(S.llm.apiKey&&S.llm.apiKey.length>10){
-        const llmBtn=h("button",{className:"btn",style:{padding:"8px 16px",background:"linear-gradient(135deg,#8b5cf6,#06b6d4)",color:"#fff",border:"none",borderRadius:"8px",fontSize:"13px",fontWeight:600,cursor:"pointer",fontFamily:"inherit",opacity:S.llmReview&&S.llmReview.loading?0.6:1},disabled:S.llmReview&&S.llmReview.loading,onClick:()=>doLLMAI(cur.id)},S.llmReview&&S.llmReview.loading&&S.llmReview.reqId===cur.id?"✨ Thinking...":"✨ LLM Rewrite");
-        aiBtns.appendChild(llmBtn);
+      // ═══ AI TOOLBAR (always visible) ═══
+      const hasFails=cur.text.trim()&&curA&&curA.failed>0;
+      const childCount=S.reqs.filter(r=>r.parent===cur.id).length;
+      const linkedRisks=S.risks.filter(rk=>rk.title&&(rk.linkedReqs||[]).includes(cur.id)).length;
+      const linkedDecs=S.decisions.filter(dc=>(dc.affectedReqs||[]).includes(cur.id)).length;
+
+      const aiToolbar=h("div",{className:"ai-toolbar"});
+      aiToolbar.appendChild(h("span",{style:{fontSize:"12px",fontWeight:700,color:"var(--purple)",marginRight:"4px"}},"🧠 AI"));
+
+      // ⚡ Auto-Fix (with violation count badge)
+      const autoFixBtn=h("button",{className:"ai-btn",style:{opacity:hasFails?1:0.4},disabled:!hasFails||S.aiLoading===cur.id,onClick:()=>doAI(cur.id)});
+      autoFixBtn.appendChild(document.createTextNode(S.aiLoading===cur.id?"⚡ Fixing...":"⚡ Auto-Fix"));
+      if(curA&&curA.failed>0){
+        autoFixBtn.appendChild(h("span",{className:"ai-btn-badge",style:{background:"var(--danger)22",color:"var(--danger)"}},String(curA.failed)));
       }
-      aiTop.appendChild(aiBtns);aiPanel.appendChild(aiTop);
-      const aiTags=h("div",{className:"ai-tags",style:{display:"flex",flexWrap:"wrap",gap:"6px"}});
-      if(curA){curA.results.filter(r=>!r.pass).forEach(r=>{
-        aiTags.appendChild(h("div",{style:{fontSize:"12px",padding:"4px 10px",borderRadius:"6px",background:"var(--danger)15",border:"1px solid var(--danger)33",color:"var(--danger)",fontWeight:500}},r.id+": "+(r.msg.length>50?r.msg.slice(0,50)+"...":r.msg)));
-      });}
-      aiPanel.appendChild(aiTags);center.appendChild(aiPanel);
-      
-      const sp=h("div",{id:"success-panel",className:"success-panel",style:{display:cur.text.trim()&&curA&&curA.failed===0?"flex":"none"}});
-      sp.appendChild(h("div",{style:{fontSize:"24px"}},"✓"));
-      const spText=h("div",{className:"sp-text"});
-      spText.appendChild(h("div",{style:{fontSize:"14px",fontWeight:600,color:"var(--success)"}},"All automated INCOSE checks passed"));
-      spText.appendChild(h("div",{style:{fontSize:"12px",color:"var(--textMid)",marginTop:"2px"}},curA?`Score: ${curA.score}% (${curA.grade}) — ${curA.warnings} rules for manual review`:""));
-      sp.appendChild(spText);center.appendChild(sp);
+      aiToolbar.appendChild(autoFixBtn);
+
+      // ✨ LLM Rewrite (always available when configured)
+      if(llmConfigured){
+        const llmRwBtn=h("button",{className:"ai-btn llm",disabled:S.llmReview&&S.llmReview.loading,onClick:()=>doLLMAI(cur.id)});
+        llmRwBtn.appendChild(document.createTextNode(S.llmReview&&S.llmReview.loading&&S.llmReview.reqId===cur.id?"✨ Thinking...":"✨ LLM Rewrite"));
+        aiToolbar.appendChild(llmRwBtn);
+
+        // 🔀 Decompose (with child count badge)
+        const decompTbBtn=h("button",{className:"ai-btn",style:{borderColor:"var(--purple)44",color:"var(--purple)"},disabled:S.llmDecomp&&S.llmDecomp.loading,onClick:()=>doDecompose(cur.id)});
+        decompTbBtn.appendChild(document.createTextNode(S.llmDecomp&&S.llmDecomp.loading&&S.llmDecomp.reqId===cur.id?"🔀 Working...":"🔀 Decompose"));
+        if(childCount>0){
+          decompTbBtn.appendChild(h("span",{className:"ai-btn-badge",style:{background:"var(--purple)22",color:"var(--purple)"}},String(childCount)));
+        }
+        aiToolbar.appendChild(decompTbBtn);
+
+        // 💡 Suggest (with linked risk/dec count badge)
+        const sugTbBtn=h("button",{className:"ai-btn",style:{borderColor:"#f59e0b44",color:"#f59e0b"},disabled:S.llmSuggest&&S.llmSuggest.loading,onClick:()=>doSuggest(cur.id)});
+        sugTbBtn.appendChild(document.createTextNode(S.llmSuggest&&S.llmSuggest.loading&&S.llmSuggest.reqId===cur.id?"💡 Analysing...":"💡 Risks & Decisions"));
+        const linkedTotal=linkedRisks+linkedDecs;
+        if(linkedTotal>0){
+          sugTbBtn.appendChild(h("span",{className:"ai-btn-badge",style:{background:"#f59e0b22",color:"#f59e0b"}},String(linkedTotal)));
+        }
+        aiToolbar.appendChild(sugTbBtn);
+      } else {
+        aiToolbar.appendChild(h("span",{style:{fontSize:"11px",color:"var(--textDim)",marginLeft:"auto"}},"Configure 🤖 LLM for AI features"));
+      }
+
+      // Score badge on right
+      if(curA){
+        const sc=curA.score>=80?"var(--success)":curA.score>=60?"var(--warn)":"var(--danger)";
+        const scoreBadge=h("span",{style:{marginLeft:"auto",fontSize:"12px",fontWeight:700,padding:"4px 10px",borderRadius:"8px",background:sc+"18",color:sc}});
+        scoreBadge.textContent=curA.score+"% "+curA.grade;
+        aiToolbar.appendChild(scoreBadge);
+      }
+      center.appendChild(aiToolbar);
+
+      // ═══ VIOLATION TAGS (if any) ═══
+      if(hasFails){
+        const aiTags=h("div",{style:{display:"flex",flexWrap:"wrap",gap:"6px",marginBottom:"14px"}});
+        curA.results.filter(r=>!r.pass).forEach(r=>{
+          aiTags.appendChild(h("div",{style:{fontSize:"11px",padding:"3px 10px",borderRadius:"6px",background:"var(--danger)12",border:"1px solid var(--danger)25",color:"var(--danger)",fontWeight:500}},r.id+": "+(r.msg.length>50?r.msg.slice(0,50)+"...":r.msg)));
+        });
+        center.appendChild(aiTags);
+      } else if(cur.text.trim()&&curA&&curA.failed===0){
+        const spnl=h("div",{style:{display:"flex",alignItems:"center",gap:"10px",padding:"12px 16px",background:"var(--success)08",border:"1px solid var(--success)22",borderRadius:"10px",marginBottom:"14px"}});
+        spnl.appendChild(h("span",{style:{fontSize:"18px"}},"✓"));
+        spnl.appendChild(h("span",{style:{fontSize:"13px",color:"var(--success)",fontWeight:600}},"All INCOSE checks passed"));
+        spnl.appendChild(h("span",{style:{fontSize:"12px",color:"var(--textMid)"}},curA.warnings+" rules for manual review"));
+        center.appendChild(spnl);
+      }
 
       // ═══ LLM REVIEW PANEL ═══
       if(S.llmReview&&S.llmReview.reqId===cur.id){
         const lrp=h("div",{style:{background:"var(--card)",border:"1px solid var(--purple)44",borderRadius:"12px",padding:"18px",marginBottom:"14px"}});
-        
         if(S.llmReview.loading){
-          lrp.appendChild(h("div",{style:{textAlign:"center",padding:"24px",color:"var(--purple)"}},
-            "✨ LLM is analysing your requirement and generating an improved version..."));
-          const dots=h("div",{style:{textAlign:"center",fontSize:"24px",color:"var(--purple)",animation:"pulse 1.5s infinite"}},"⏳");
-          lrp.appendChild(dots);
+          lrp.appendChild(h("div",{style:{textAlign:"center",padding:"24px",color:"var(--purple)"}},"✨ LLM is analysing your requirement..."));
+          lrp.appendChild(h("div",{style:{textAlign:"center",fontSize:"24px",color:"var(--purple)",animation:"pulse 1.5s infinite"}},"⏳"));
         } else if(S.llmReview.error){
           const errHead=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}});
           errHead.appendChild(h("div",{style:{fontSize:"14px",fontWeight:600,color:"var(--danger)"}},"✕ LLM Rewrite Failed"));
@@ -3114,61 +3214,127 @@ function render(){
           lrp.appendChild(errHead);
           lrp.appendChild(h("div",{style:{fontSize:"12px",color:"var(--danger)",padding:"8px 12px",background:"var(--danger)11",borderRadius:"6px"}},S.llmReview.error));
         } else if(S.llmReview.suggested){
-          // Header
           const lrHead=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}});
           lrHead.appendChild(h("div",{style:{fontSize:"14px",fontWeight:700,color:"var(--purple)"}},"✨ LLM Suggestion"));
-          if(S.llmReview.confidence!=null){
-            const conf=Math.round(S.llmReview.confidence*100);
-            const confColor=conf>=80?"var(--success)":conf>=60?"var(--warn)":"var(--danger)";
-            lrHead.appendChild(h("span",{style:{fontSize:"11px",padding:"3px 8px",borderRadius:"8px",background:confColor+"22",color:confColor,fontWeight:600}},conf+"% confidence"));
-          }
+          if(S.llmReview.confidence!=null){const conf=Math.round(S.llmReview.confidence*100);const confColor=conf>=80?"var(--success)":conf>=60?"var(--warn)":"var(--danger)";lrHead.appendChild(h("span",{style:{fontSize:"11px",padding:"3px 8px",borderRadius:"8px",background:confColor+"22",color:confColor,fontWeight:600}},conf+"% confidence"));}
           lrp.appendChild(lrHead);
-
-          // Original
           const origBox=h("div",{style:{padding:"10px 14px",borderRadius:"8px",background:"var(--danger)08",border:"1px solid var(--danger)22",marginBottom:"10px"}});
           origBox.appendChild(h("div",{style:{fontSize:"10px",fontWeight:600,color:"var(--danger)",textTransform:"uppercase",letterSpacing:".05em",marginBottom:"4px"}},"Original"));
           origBox.appendChild(h("div",{style:{fontSize:"13px",color:"var(--textMid)",lineHeight:"1.6",textDecoration:"line-through",textDecorationColor:"var(--danger)44"}},S.llmReview.original));
           lrp.appendChild(origBox);
-
-          // Suggested
           const sugBox=h("div",{style:{padding:"10px 14px",borderRadius:"8px",background:"var(--success)08",border:"1px solid var(--success)22",marginBottom:"10px"}});
           sugBox.appendChild(h("div",{style:{fontSize:"10px",fontWeight:600,color:"var(--success)",textTransform:"uppercase",letterSpacing:".05em",marginBottom:"4px"}},"Suggested"));
           sugBox.appendChild(h("div",{style:{fontSize:"13px",color:"var(--text)",lineHeight:"1.6",fontWeight:500}},S.llmReview.suggested));
           lrp.appendChild(sugBox);
-
-          // Changes summary
-          if(S.llmReview.changes){
-            const chgBox=h("div",{style:{padding:"8px 12px",borderRadius:"6px",background:"var(--surfAlt)",marginBottom:"14px"}});
-            chgBox.appendChild(h("div",{style:{fontSize:"10px",fontWeight:600,color:"var(--textDim)",textTransform:"uppercase",letterSpacing:".05em",marginBottom:"3px"}},"Changes Made"));
-            chgBox.appendChild(h("div",{style:{fontSize:"12px",color:"var(--textMid)",lineHeight:"1.5"}},S.llmReview.changes));
-            lrp.appendChild(chgBox);
-          }
-
-          // Score comparison
-          const origScore=analyze(S.llmReview.original).score;
-          const newScore=analyze(S.llmReview.suggested).score;
-          const scoreDiff=newScore-origScore;
+          if(S.llmReview.changes){const chgBox=h("div",{style:{padding:"8px 12px",borderRadius:"6px",background:"var(--surfAlt)",marginBottom:"14px"}});chgBox.appendChild(h("div",{style:{fontSize:"10px",fontWeight:600,color:"var(--textDim)",textTransform:"uppercase",letterSpacing:".05em",marginBottom:"3px"}},"Changes Made"));chgBox.appendChild(h("div",{style:{fontSize:"12px",color:"var(--textMid)",lineHeight:"1.5"}},S.llmReview.changes));lrp.appendChild(chgBox);}
+          const origScore=analyze(S.llmReview.original).score;const newScore=analyze(S.llmReview.suggested).score;const scoreDiff=newScore-origScore;
           const scoreRow=h("div",{style:{display:"flex",alignItems:"center",gap:"12px",marginBottom:"14px"}});
           scoreRow.appendChild(h("span",{style:{fontSize:"12px",color:"var(--textMid)"}},"Score:"));
           scoreRow.appendChild(h("span",{style:{fontSize:"13px",fontWeight:700,color:origScore>=80?"var(--success)":"var(--danger)"}},origScore+"%"));
           scoreRow.appendChild(h("span",{style:{fontSize:"12px",color:"var(--textMid)"}},"→"));
           scoreRow.appendChild(h("span",{style:{fontSize:"13px",fontWeight:700,color:newScore>=80?"var(--success)":"var(--danger)"}},newScore+"%"));
-          if(scoreDiff!==0){
-            scoreRow.appendChild(h("span",{style:{fontSize:"11px",padding:"2px 6px",borderRadius:"6px",background:scoreDiff>0?"var(--success)22":"var(--danger)22",color:scoreDiff>0?"var(--success)":"var(--danger)",fontWeight:600}},(scoreDiff>0?"+":"")+scoreDiff+"%"));
-          }
+          if(scoreDiff!==0){scoreRow.appendChild(h("span",{style:{fontSize:"11px",padding:"2px 6px",borderRadius:"6px",background:scoreDiff>0?"var(--success)22":"var(--danger)22",color:scoreDiff>0?"var(--success)":"var(--danger)",fontWeight:600}},(scoreDiff>0?"+":"")+scoreDiff+"%"));}
           lrp.appendChild(scoreRow);
-
-          // Accept / Reject buttons
           const lrBtns=h("div",{style:{display:"flex",gap:"10px"}});
-          const acceptBtn=h("button",{style:{padding:"8px 20px",borderRadius:"8px",border:"none",background:"var(--success)",color:"#fff",fontSize:"13px",fontWeight:600,cursor:"pointer",fontFamily:"inherit"},onClick:acceptLLM},"✓ Accept Rewrite");
-          const rejectBtn=h("button",{style:{padding:"8px 20px",borderRadius:"8px",border:"1px solid var(--border)",background:"transparent",color:"var(--textMid)",fontSize:"13px",cursor:"pointer",fontFamily:"inherit"},onClick:rejectLLM},"✕ Discard");
-          lrBtns.appendChild(acceptBtn);lrBtns.appendChild(rejectBtn);
+          lrBtns.appendChild(h("button",{style:{padding:"8px 20px",borderRadius:"8px",border:"none",background:"var(--success)",color:"#fff",fontSize:"13px",fontWeight:600,cursor:"pointer",fontFamily:"inherit"},onClick:acceptLLM},"✓ Accept Rewrite"));
+          lrBtns.appendChild(h("button",{style:{padding:"8px 20px",borderRadius:"8px",border:"1px solid var(--border)",background:"transparent",color:"var(--textMid)",fontSize:"13px",cursor:"pointer",fontFamily:"inherit"},onClick:rejectLLM},"✕ Discard"));
           lrp.appendChild(lrBtns);
         }
         center.appendChild(lrp);
       }
 
-      // Attributes card
+      // ═══ DECOMPOSE RESULTS ═══
+      if(S.llmDecomp&&S.llmDecomp.reqId===cur.id&&!S.llmDecomp.loading){
+        const dp=h("div",{style:{background:"var(--card)",border:"1px solid var(--purple)33",borderRadius:"12px",padding:"16px",marginBottom:"14px"}});
+        if(S.llmDecomp.error){
+          dp.appendChild(h("div",{style:{fontSize:"13px",color:"var(--danger)",marginBottom:"8px"}},"✕ "+S.llmDecomp.error));
+          dp.appendChild(h("button",{style:{padding:"5px 12px",borderRadius:"6px",border:"1px solid var(--border)",background:"transparent",color:"var(--textMid)",fontSize:"11px",cursor:"pointer",fontFamily:"inherit"},onClick:()=>{S.llmDecomp=null;render();}},"Dismiss"));
+        } else if(S.llmDecomp.results&&S.llmDecomp.results.length>0){
+          const dpHead=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}});
+          dpHead.appendChild(h("div",{style:{fontSize:"14px",fontWeight:600,color:"var(--purple)"}},"🔀 "+S.llmDecomp.results.length+" Child Requirements Generated"));
+          const addAllDecomp=h("button",{style:{padding:"6px 14px",borderRadius:"6px",border:"none",background:"var(--success)",color:"#fff",fontSize:"12px",fontWeight:600,cursor:"pointer",fontFamily:"inherit"},onClick:()=>{
+            History.save();const cnt=S.llmDecomp.results.length;
+            S.llmDecomp.results.forEach(res=>{const r=mkReq({text:res.text,type:res.type||cur.type,level:res.level||"Subsystem Requirement",priority:res.priority||cur.priority,verification:res.verification||cur.verification,rationale:res.rationale||"",parent:cur.id});if(!r.history)r.history=[];r.history.push({timestamp:new Date().toISOString(),field:"Created (LLM Decompose)",oldValue:"",newValue:res.text.substring(0,60)+(res.text.length>60?"…":""),author:"LLM ("+S.llm.model+")"});S.reqs.push(r);});
+            S.llmDecomp=null;autoSave();toast("Added "+cnt+" child requirements to "+cur.id,"success");render();
+          }});
+          addAllDecomp.textContent="✓ Add All as Children";dpHead.appendChild(addAllDecomp);dp.appendChild(dpHead);
+          dp.appendChild(h("div",{style:{fontSize:"11px",color:"var(--textDim)",marginBottom:"12px",padding:"6px 10px",background:"var(--surfAlt)",borderRadius:"6px"}},"Parent: "+cur.id+" — "+(cur.text||"").substring(0,80)+(cur.text.length>80?"…":"")));
+          S.llmDecomp.results.forEach((res,i)=>{
+            const card=h("div",{style:{padding:"12px",borderRadius:"8px",border:"1px solid var(--border)",background:"var(--surface)",marginBottom:"8px"}});
+            const top=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px"}});
+            const tags=h("div",{style:{display:"flex",gap:"6px",flexWrap:"wrap"}});
+            if(res.type)tags.appendChild(h("span",{className:"badge",style:{fontSize:"10px",background:"var(--accent)22",color:"var(--accent)"}},res.type));
+            if(res.level)tags.appendChild(h("span",{className:"badge",style:{fontSize:"10px"}},res.level.replace(" Requirement","")));
+            if(res.verification)tags.appendChild(h("span",{className:"badge",style:{fontSize:"10px",background:"var(--success)22",color:"var(--success)"}},res.verification));
+            top.appendChild(tags);
+            const dScore=analyze(res.text||"").score;const dsc=dScore>=80?"var(--success)":dScore>=60?"var(--warn)":"var(--danger)";
+            top.appendChild(h("span",{style:{fontSize:"12px",fontWeight:700,color:dsc}},dScore+"%"));
+            card.appendChild(top);
+            card.appendChild(h("div",{style:{fontSize:"13px",color:"var(--text)",lineHeight:"1.6",marginBottom:"6px"}},res.text||""));
+            if(res.rationale)card.appendChild(h("div",{style:{fontSize:"11px",color:"var(--textDim)",fontStyle:"italic",marginBottom:"6px"}},"↳ "+res.rationale));
+            const addOne=h("button",{style:{padding:"4px 10px",borderRadius:"6px",border:"1px solid var(--success)44",background:"transparent",color:"var(--success)",fontSize:"11px",fontWeight:600,cursor:"pointer",fontFamily:"inherit",opacity:res._added?0.5:1},disabled:!!res._added,onClick:()=>{
+              History.save();const r=mkReq({text:res.text,type:res.type||cur.type,level:res.level||"Subsystem Requirement",priority:res.priority||cur.priority,verification:res.verification||cur.verification,rationale:res.rationale||"",parent:cur.id});if(!r.history)r.history=[];r.history.push({timestamp:new Date().toISOString(),field:"Created (LLM Decompose)",oldValue:"",newValue:res.text.substring(0,60)+(res.text.length>60?"…":""),author:"LLM ("+S.llm.model+")"});S.reqs.push(r);autoSave();res._added=true;toast("Added child of "+cur.id,"success");render();
+            }});
+            addOne.textContent=res._added?"✓ Added":"+ Add";card.appendChild(addOne);dp.appendChild(card);
+          });
+          dp.appendChild(h("button",{style:{marginTop:"6px",padding:"5px 12px",borderRadius:"6px",border:"1px solid var(--border)",background:"transparent",color:"var(--textMid)",fontSize:"11px",cursor:"pointer",fontFamily:"inherit"},onClick:()=>{S.llmDecomp=null;render();}},"✕ Dismiss"));
+        }
+        center.appendChild(dp);
+      }
+
+      // ═══ SUGGEST RESULTS ═══
+      if(S.llmSuggest&&S.llmSuggest.reqId===cur.id&&!S.llmSuggest.loading){
+        const sgp=h("div",{style:{background:"var(--card)",border:"1px solid #f59e0b33",borderRadius:"12px",padding:"16px",marginBottom:"14px"}});
+        if(S.llmSuggest.error){
+          sgp.appendChild(h("div",{style:{fontSize:"13px",color:"var(--danger)",marginBottom:"8px"}},"✕ "+S.llmSuggest.error));
+          sgp.appendChild(h("button",{style:{padding:"5px 12px",borderRadius:"6px",border:"1px solid var(--border)",background:"transparent",color:"var(--textMid)",fontSize:"11px",cursor:"pointer",fontFamily:"inherit"},onClick:()=>{S.llmSuggest=null;render();}},"Dismiss"));
+        } else {
+          const rCnt=(S.llmSuggest.risks||[]).length;const dCnt=(S.llmSuggest.decisions||[]).length;
+          const sgHead=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}});
+          sgHead.appendChild(h("div",{style:{fontSize:"14px",fontWeight:600,color:"#f59e0b"}},"💡 "+rCnt+" Risk"+(rCnt!==1?"s":"")+", "+dCnt+" Decision"+(dCnt!==1?"s":"")+" Suggested"));
+          const addAllSD=h("button",{style:{padding:"6px 14px",borderRadius:"6px",border:"none",background:"var(--success)",color:"#fff",fontSize:"12px",fontWeight:600,cursor:"pointer",fontFamily:"inherit"},onClick:()=>{
+            History.save();let rc=0,dc=0;
+            (S.llmSuggest.risks||[]).forEach(rsk=>{if(rsk._added)return;const nr=mkRisk({title:rsk.title,description:rsk.description||rsk.desc||"",category:rsk.category||"Technical",likelihood:rsk.likelihood||3,impact:rsk.impact||3,status:"Open",mitigations:rsk.mitigation?[rsk.mitigation]:[],linkedReqs:[cur.id]});S.risks.push(nr);rsk._added=true;rc++;});
+            (S.llmSuggest.decisions||[]).forEach(dec=>{if(dec._added)return;const nd=mkDec({title:dec.title,decision:dec.decision||"",rationale:dec.rationale||"",alternatives:dec.alternatives||"",category:dec.category||"Design",status:"Proposed",affectedReqs:[cur.id]});S.decisions.push(nd);dec._added=true;dc++;});
+            autoSave();toast("Added "+rc+" risks, "+dc+" decisions","success");render();
+          }});
+          addAllSD.textContent="✓ Add All";sgHead.appendChild(addAllSD);sgp.appendChild(sgHead);
+          if(rCnt>0){
+            sgp.appendChild(h("div",{style:{fontSize:"12px",fontWeight:600,color:"var(--danger)",marginBottom:"8px",textTransform:"uppercase",letterSpacing:".05em"}},"⚠ Risks"));
+            (S.llmSuggest.risks||[]).forEach(rsk=>{
+              const card=h("div",{style:{padding:"12px",borderRadius:"8px",border:"1px solid var(--border)",background:"var(--surface)",marginBottom:"8px"}});
+              const top=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px"}});
+              const left=h("div",{style:{display:"flex",alignItems:"center",gap:"8px"}});
+              left.appendChild(h("span",{style:{fontSize:"13px",fontWeight:600}},rsk.title));
+              const rScore=(rsk.likelihood||3)*(rsk.impact||3);const sevColor=rScore>=15?"var(--danger)":rScore>=10?"#f97316":rScore>=5?"var(--warn)":"var(--success)";const sevLabel=rScore>=15?"Critical":rScore>=10?"High":rScore>=5?"Medium":"Low";
+              left.appendChild(h("span",{className:"badge",style:{fontSize:"10px",background:sevColor+"22",color:sevColor}},sevLabel+" ("+rScore+")"));top.appendChild(left);
+              const rtags=h("div",{style:{display:"flex",gap:"4px"}});rtags.appendChild(h("span",{className:"badge",style:{fontSize:"10px"}},rsk.category||"Technical"));rtags.appendChild(h("span",{className:"badge",style:{fontSize:"10px"}},"L:"+rsk.likelihood+" × I:"+rsk.impact));top.appendChild(rtags);card.appendChild(top);
+              if(rsk.description||rsk.desc)card.appendChild(h("div",{style:{fontSize:"12px",color:"var(--textMid)",lineHeight:"1.5",marginBottom:"6px"}},rsk.description||rsk.desc));
+              if(rsk.mitigation)card.appendChild(h("div",{style:{fontSize:"11px",color:"var(--success)",marginBottom:"6px"}},"Mitigation: "+rsk.mitigation));
+              const addR=h("button",{style:{padding:"4px 10px",borderRadius:"6px",border:"1px solid var(--success)44",background:"transparent",color:"var(--success)",fontSize:"11px",fontWeight:600,cursor:"pointer",fontFamily:"inherit",opacity:rsk._added?0.5:1},disabled:!!rsk._added,onClick:()=>{History.save();const nr=mkRisk({title:rsk.title,description:rsk.description||rsk.desc||"",category:rsk.category||"Technical",likelihood:rsk.likelihood||3,impact:rsk.impact||3,status:"Open",mitigations:rsk.mitigation?[rsk.mitigation]:[],linkedReqs:[cur.id]});S.risks.push(nr);autoSave();rsk._added=true;toast("Added "+nr.id,"success");render();}});
+              addR.textContent=rsk._added?"✓ Added":"+ Add Risk";card.appendChild(addR);sgp.appendChild(card);
+            });
+          }
+          if(dCnt>0){
+            sgp.appendChild(h("div",{style:{fontSize:"12px",fontWeight:600,color:"var(--accent)",marginBottom:"8px",marginTop:"12px",textTransform:"uppercase",letterSpacing:".05em"}},"📋 Decisions"));
+            (S.llmSuggest.decisions||[]).forEach(dec=>{
+              const card=h("div",{style:{padding:"12px",borderRadius:"8px",border:"1px solid var(--border)",background:"var(--surface)",marginBottom:"8px"}});
+              const top=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px"}});
+              top.appendChild(h("span",{style:{fontSize:"13px",fontWeight:600}},dec.title));
+              top.appendChild(h("span",{className:"badge",style:{fontSize:"10px"}},dec.category||"Design"));card.appendChild(top);
+              if(dec.decision)card.appendChild(h("div",{style:{fontSize:"12px",color:"var(--text)",lineHeight:"1.5",marginBottom:"4px"}},dec.decision));
+              if(dec.rationale)card.appendChild(h("div",{style:{fontSize:"11px",color:"var(--textDim)",fontStyle:"italic",marginBottom:"4px"}},"Rationale: "+dec.rationale));
+              if(dec.alternatives)card.appendChild(h("div",{style:{fontSize:"11px",color:"var(--textDim)",marginBottom:"6px"}},"Alternatives: "+dec.alternatives));
+              const addD=h("button",{style:{padding:"4px 10px",borderRadius:"6px",border:"1px solid var(--success)44",background:"transparent",color:"var(--success)",fontSize:"11px",fontWeight:600,cursor:"pointer",fontFamily:"inherit",opacity:dec._added?0.5:1},disabled:!!dec._added,onClick:()=>{History.save();const nd=mkDec({title:dec.title,decision:dec.decision||"",rationale:dec.rationale||"",alternatives:dec.alternatives||"",category:dec.category||"Design",status:"Proposed",affectedReqs:[cur.id]});S.decisions.push(nd);autoSave();dec._added=true;toast("Added "+nd.id,"success");render();}});
+              addD.textContent=dec._added?"✓ Added":"+ Add Decision";card.appendChild(addD);sgp.appendChild(card);
+            });
+          }
+          sgp.appendChild(h("button",{style:{marginTop:"8px",padding:"5px 12px",borderRadius:"6px",border:"1px solid var(--border)",background:"transparent",color:"var(--textMid)",fontSize:"11px",cursor:"pointer",fontFamily:"inherit"},onClick:()=>{S.llmSuggest=null;render();}},"✕ Dismiss"));
+        }
+        center.appendChild(sgp);
+      }
+
+      // ═══ ATTRIBUTES ═══
       const attrCard=h("div",{className:"card",style:{marginBottom:"14px"}});
       attrCard.appendChild(h("h3",{style:{fontSize:"13px",fontWeight:600,marginBottom:"14px",color:"var(--accent)"}},"Attributes"));
       const attrGrid=h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"14px"}});
@@ -3179,188 +3345,19 @@ function render(){
         g.appendChild(sel);attrGrid.appendChild(g);
       });
       attrCard.appendChild(attrGrid);
-
       const attrRow2=h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"14px",marginTop:"14px"}});
       const pg=h("div",{});pg.appendChild(h("label",{className:"label"},"Parent"));
       const pSel=h("select",{className:"input",value:cur.parent||"",onChange:e=>updateReq(cur.id,{parent:e.target.value})});
       pSel.appendChild(h("option",{value:""},"None"));
       S.reqs.filter(r=>r.id!==cur.id).forEach(r=>{const o=h("option",{value:r.id},r.id+" — "+(r.text||"").slice(0,40));if(cur.parent===r.id)o.selected=true;pSel.appendChild(o);});
       pg.appendChild(pSel);attrRow2.appendChild(pg);
-      const sg=h("div",{});sg.appendChild(h("label",{className:"label"},"Source"));
-      sg.appendChild(h("input",{className:"input",value:cur.source||"",placeholder:"ConOps §3.2, Interview #4",onInput:e=>updateReqSilent(cur.id,{source:e.target.value})}));
-      attrRow2.appendChild(sg);attrCard.appendChild(attrRow2);
-
+      const sgg=h("div",{});sgg.appendChild(h("label",{className:"label"},"Source"));
+      sgg.appendChild(h("input",{className:"input",value:cur.source||"",placeholder:"ConOps §3.2, Interview #4",onInput:e=>updateReqSilent(cur.id,{source:e.target.value})}));
+      attrRow2.appendChild(sgg);attrCard.appendChild(attrRow2);
       const ratDiv=h("div",{style:{marginTop:"14px"}});
       ratDiv.appendChild(h("label",{className:"label"},"Rationale (per R20 — purpose goes here, not in statement)"));
       ratDiv.appendChild(h("textarea",{className:"input",style:{height:"auto",resize:"vertical",lineHeight:"1.6"},rows:3,value:cur.rationale||"",placeholder:"Why is this requirement necessary?",onInput:e=>updateReqSilent(cur.id,{rationale:e.target.value})}));
       attrCard.appendChild(ratDiv);center.appendChild(attrCard);
-
-      // ═══ DECOMPOSE PANEL ═══
-      if(S.llm.apiKey&&S.llm.apiKey.length>10){
-        const decompCard=h("div",{style:{marginBottom:"14px"}});
-        
-        // Decompose button row
-        const decompRow=h("div",{style:{display:"flex",alignItems:"center",gap:"10px",marginBottom:S.llmDecomp&&S.llmDecomp.reqId===cur.id?"14px":"0"}});
-        const childCount=S.reqs.filter(r=>r.parent===cur.id).length;
-        const decompBtn=h("button",{style:{padding:"8px 16px",borderRadius:"8px",border:"1px solid var(--purple)44",background:"transparent",color:"var(--purple)",fontSize:"12px",fontWeight:600,cursor:"pointer",fontFamily:"inherit",opacity:S.llmDecomp&&S.llmDecomp.loading?0.6:1},disabled:S.llmDecomp&&S.llmDecomp.loading,onClick:()=>doDecompose(cur.id)});
-        decompBtn.textContent=S.llmDecomp&&S.llmDecomp.loading&&S.llmDecomp.reqId===cur.id?"🔀 Decomposing...":"🔀 Decompose into Children";
-        decompRow.appendChild(decompBtn);
-        // Suggest risks & decisions button
-        const sugBtn=h("button",{style:{padding:"8px 16px",borderRadius:"8px",border:"1px solid #f59e0b44",background:"transparent",color:"#f59e0b",fontSize:"12px",fontWeight:600,cursor:"pointer",fontFamily:"inherit",opacity:S.llmSuggest&&S.llmSuggest.loading?0.6:1},disabled:S.llmSuggest&&S.llmSuggest.loading,onClick:()=>doSuggest(cur.id)});
-        sugBtn.textContent=S.llmSuggest&&S.llmSuggest.loading&&S.llmSuggest.reqId===cur.id?"💡 Analysing...":"💡 Suggest Risks & Decisions";
-        decompRow.appendChild(sugBtn);
-        if(childCount>0){
-          decompRow.appendChild(h("span",{style:{fontSize:"11px",color:"var(--textDim)"}},childCount+" existing child"+(childCount>1?"ren":"")));
-        }
-        decompCard.appendChild(decompRow);
-
-        // Results
-        if(S.llmDecomp&&S.llmDecomp.reqId===cur.id&&!S.llmDecomp.loading){
-          const dp=h("div",{style:{background:"var(--card)",border:"1px solid var(--purple)33",borderRadius:"12px",padding:"16px"}});
-
-          if(S.llmDecomp.error){
-            dp.appendChild(h("div",{style:{fontSize:"13px",color:"var(--danger)",marginBottom:"8px"}},"✕ "+S.llmDecomp.error));
-            dp.appendChild(h("button",{style:{padding:"5px 12px",borderRadius:"6px",border:"1px solid var(--border)",background:"transparent",color:"var(--textMid)",fontSize:"11px",cursor:"pointer",fontFamily:"inherit"},onClick:()=>{S.llmDecomp=null;render();}},"Dismiss"));
-          } else if(S.llmDecomp.results&&S.llmDecomp.results.length>0){
-            const dpHead=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}});
-            dpHead.appendChild(h("div",{style:{fontSize:"14px",fontWeight:600,color:"var(--purple)"}},"🔀 "+S.llmDecomp.results.length+" Child Requirements Generated"));
-            const addAllDecomp=h("button",{style:{padding:"6px 14px",borderRadius:"6px",border:"none",background:"var(--success)",color:"#fff",fontSize:"12px",fontWeight:600,cursor:"pointer",fontFamily:"inherit"},onClick:()=>{
-              History.save();const cnt=S.llmDecomp.results.length;
-              S.llmDecomp.results.forEach(res=>{
-                const r=mkReq({text:res.text,type:res.type||cur.type,level:res.level||"Subsystem Requirement",priority:res.priority||cur.priority,verification:res.verification||cur.verification,rationale:res.rationale||"",parent:cur.id});
-                if(!r.history)r.history=[];
-                r.history.push({timestamp:new Date().toISOString(),field:"Created (LLM Decompose)",oldValue:"",newValue:res.text.substring(0,60)+(res.text.length>60?"…":""),author:"LLM ("+S.llm.model+")"});
-                S.reqs.push(r);
-              });
-              S.llmDecomp=null;autoSave();toast("Added "+cnt+" child requirements to "+cur.id,"success");render();
-            }});
-            addAllDecomp.textContent="✓ Add All as Children";
-            dpHead.appendChild(addAllDecomp);dp.appendChild(dpHead);
-
-            // Parent reference
-            dp.appendChild(h("div",{style:{fontSize:"11px",color:"var(--textDim)",marginBottom:"12px",padding:"6px 10px",background:"var(--surfAlt)",borderRadius:"6px"}},"Parent: "+cur.id+" — "+(cur.text||"").substring(0,80)+(cur.text.length>80?"…":"")));
-
-            S.llmDecomp.results.forEach((res,i)=>{
-              const card=h("div",{style:{padding:"12px",borderRadius:"8px",border:"1px solid var(--border)",background:"var(--surface)",marginBottom:"8px"}});
-              const top=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px"}});
-              const tags=h("div",{style:{display:"flex",gap:"6px",flexWrap:"wrap"}});
-              if(res.type)tags.appendChild(h("span",{className:"badge",style:{fontSize:"10px",background:"var(--accent)22",color:"var(--accent)"}},res.type));
-              if(res.level)tags.appendChild(h("span",{className:"badge",style:{fontSize:"10px"}},res.level.replace(" Requirement","")));
-              if(res.verification)tags.appendChild(h("span",{className:"badge",style:{fontSize:"10px",background:"var(--success)22",color:"var(--success)"}},res.verification));
-              top.appendChild(tags);
-              const score=analyze(res.text||"").score;const sc=score>=80?"var(--success)":score>=60?"var(--warn)":"var(--danger)";
-              top.appendChild(h("span",{style:{fontSize:"12px",fontWeight:700,color:sc}},score+"%"));
-              card.appendChild(top);
-              card.appendChild(h("div",{style:{fontSize:"13px",color:"var(--text)",lineHeight:"1.6",marginBottom:"6px"}},res.text||""));
-              if(res.rationale)card.appendChild(h("div",{style:{fontSize:"11px",color:"var(--textDim)",fontStyle:"italic",marginBottom:"6px"}},"↳ "+res.rationale));
-              
-              const addOne=h("button",{style:{padding:"4px 10px",borderRadius:"6px",border:"1px solid var(--success)44",background:"transparent",color:"var(--success)",fontSize:"11px",fontWeight:600,cursor:"pointer",fontFamily:"inherit",opacity:res._added?0.5:1},disabled:!!res._added,onClick:()=>{
-                History.save();
-                const r=mkReq({text:res.text,type:res.type||cur.type,level:res.level||"Subsystem Requirement",priority:res.priority||cur.priority,verification:res.verification||cur.verification,rationale:res.rationale||"",parent:cur.id});
-                if(!r.history)r.history=[];
-                r.history.push({timestamp:new Date().toISOString(),field:"Created (LLM Decompose)",oldValue:"",newValue:res.text.substring(0,60)+(res.text.length>60?"…":""),author:"LLM ("+S.llm.model+")"});
-                S.reqs.push(r);autoSave();res._added=true;toast("Added child of "+cur.id,"success");render();
-              }});
-              addOne.textContent=res._added?"✓ Added":"+ Add";card.appendChild(addOne);
-              dp.appendChild(card);
-            });
-
-            // Dismiss
-            dp.appendChild(h("button",{style:{marginTop:"6px",padding:"5px 12px",borderRadius:"6px",border:"1px solid var(--border)",background:"transparent",color:"var(--textMid)",fontSize:"11px",cursor:"pointer",fontFamily:"inherit"},onClick:()=>{S.llmDecomp=null;render();}},"✕ Dismiss"));
-          }
-          decompCard.appendChild(dp);
-        }
-        center.appendChild(decompCard);
-      }
-
-      // ═══ LLM SUGGEST RISKS & DECISIONS PANEL ═══
-      if(S.llmSuggest&&S.llmSuggest.reqId===cur.id&&!S.llmSuggest.loading){
-        const sp=h("div",{style:{background:"var(--card)",border:"1px solid #f59e0b33",borderRadius:"12px",padding:"16px",marginBottom:"14px"}});
-
-        if(S.llmSuggest.error){
-          sp.appendChild(h("div",{style:{fontSize:"13px",color:"var(--danger)",marginBottom:"8px"}},"✕ "+S.llmSuggest.error));
-          sp.appendChild(h("button",{style:{padding:"5px 12px",borderRadius:"6px",border:"1px solid var(--border)",background:"transparent",color:"var(--textMid)",fontSize:"11px",cursor:"pointer",fontFamily:"inherit"},onClick:()=>{S.llmSuggest=null;render();}},"Dismiss"));
-        } else {
-          const spHead=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}});
-          const rCnt=(S.llmSuggest.risks||[]).length;const dCnt=(S.llmSuggest.decisions||[]).length;
-          spHead.appendChild(h("div",{style:{fontSize:"14px",fontWeight:600,color:"#f59e0b"}},"💡 "+rCnt+" Risk"+(rCnt!==1?"s":"")+", "+dCnt+" Decision"+(dCnt!==1?"s":"")+" Suggested"));
-          // Add all button
-          const addAllSD=h("button",{style:{padding:"6px 14px",borderRadius:"6px",border:"none",background:"var(--success)",color:"#fff",fontSize:"12px",fontWeight:600,cursor:"pointer",fontFamily:"inherit"},onClick:()=>{
-            History.save();let rc=0,dc=0;
-            (S.llmSuggest.risks||[]).forEach(rsk=>{
-              if(rsk._added)return;
-              const nr=mkRisk({title:rsk.title,description:rsk.description||rsk.desc||"",category:rsk.category||"Technical",likelihood:rsk.likelihood||3,impact:rsk.impact||3,status:"Open",mitigations:rsk.mitigation?[rsk.mitigation]:[],linkedReqs:[cur.id]});
-              S.risks.push(nr);rsk._added=true;rc++;
-            });
-            (S.llmSuggest.decisions||[]).forEach(dec=>{
-              if(dec._added)return;
-              const nd=mkDec({title:dec.title,decision:dec.decision||"",rationale:dec.rationale||"",alternatives:dec.alternatives||"",category:dec.category||"Design",status:"Proposed",affectedReqs:[cur.id]});
-              S.decisions.push(nd);dec._added=true;dc++;
-            });
-            autoSave();toast("Added "+rc+" risks, "+dc+" decisions","success");render();
-          }});
-          addAllSD.textContent="✓ Add All";spHead.appendChild(addAllSD);
-          sp.appendChild(spHead);
-
-          // Risks
-          if(rCnt>0){
-            sp.appendChild(h("div",{style:{fontSize:"12px",fontWeight:600,color:"var(--danger)",marginBottom:"8px",textTransform:"uppercase",letterSpacing:".05em"}},"⚠ Risks"));
-            (S.llmSuggest.risks||[]).forEach(rsk=>{
-              const card=h("div",{style:{padding:"12px",borderRadius:"8px",border:"1px solid var(--border)",background:"var(--surface)",marginBottom:"8px"}});
-              const top=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px"}});
-              const left=h("div",{style:{display:"flex",alignItems:"center",gap:"8px"}});
-              left.appendChild(h("span",{style:{fontSize:"13px",fontWeight:600}},rsk.title));
-              const score=(rsk.likelihood||3)*(rsk.impact||3);
-              const sevColor=score>=15?"var(--danger)":score>=10?"#f97316":score>=5?"var(--warn)":"var(--success)";
-              const sevLabel=score>=15?"Critical":score>=10?"High":score>=5?"Medium":"Low";
-              left.appendChild(h("span",{className:"badge",style:{fontSize:"10px",background:sevColor+"22",color:sevColor}},sevLabel+" ("+score+")"));
-              top.appendChild(left);
-              const tags=h("div",{style:{display:"flex",gap:"4px"}});
-              tags.appendChild(h("span",{className:"badge",style:{fontSize:"10px"}},rsk.category||"Technical"));
-              tags.appendChild(h("span",{className:"badge",style:{fontSize:"10px"}},"L:"+rsk.likelihood+" × I:"+rsk.impact));
-              top.appendChild(tags);
-              card.appendChild(top);
-              if(rsk.description||rsk.desc)card.appendChild(h("div",{style:{fontSize:"12px",color:"var(--textMid)",lineHeight:"1.5",marginBottom:"6px"}},rsk.description||rsk.desc));
-              if(rsk.mitigation){
-                card.appendChild(h("div",{style:{fontSize:"11px",color:"var(--success)",marginBottom:"6px"}},"Mitigation: "+rsk.mitigation));
-              }
-              const addR=h("button",{style:{padding:"4px 10px",borderRadius:"6px",border:"1px solid var(--success)44",background:"transparent",color:"var(--success)",fontSize:"11px",fontWeight:600,cursor:"pointer",fontFamily:"inherit",opacity:rsk._added?0.5:1},disabled:!!rsk._added,onClick:()=>{
-                History.save();
-                const nr=mkRisk({title:rsk.title,description:rsk.description||rsk.desc||"",category:rsk.category||"Technical",likelihood:rsk.likelihood||3,impact:rsk.impact||3,status:"Open",mitigations:rsk.mitigation?[rsk.mitigation]:[],linkedReqs:[cur.id]});
-                S.risks.push(nr);autoSave();rsk._added=true;toast("Added "+nr.id,"success");render();
-              }});
-              addR.textContent=rsk._added?"✓ Added":"+ Add Risk";card.appendChild(addR);
-              sp.appendChild(card);
-            });
-          }
-
-          // Decisions
-          if(dCnt>0){
-            sp.appendChild(h("div",{style:{fontSize:"12px",fontWeight:600,color:"var(--accent)",marginBottom:"8px",marginTop:"12px",textTransform:"uppercase",letterSpacing:".05em"}},"📋 Decisions"));
-            (S.llmSuggest.decisions||[]).forEach(dec=>{
-              const card=h("div",{style:{padding:"12px",borderRadius:"8px",border:"1px solid var(--border)",background:"var(--surface)",marginBottom:"8px"}});
-              const top=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px"}});
-              top.appendChild(h("span",{style:{fontSize:"13px",fontWeight:600}},dec.title));
-              top.appendChild(h("span",{className:"badge",style:{fontSize:"10px"}},dec.category||"Design"));
-              card.appendChild(top);
-              if(dec.decision)card.appendChild(h("div",{style:{fontSize:"12px",color:"var(--text)",lineHeight:"1.5",marginBottom:"4px"}},dec.decision));
-              if(dec.rationale)card.appendChild(h("div",{style:{fontSize:"11px",color:"var(--textDim)",fontStyle:"italic",marginBottom:"4px"}},"Rationale: "+dec.rationale));
-              if(dec.alternatives)card.appendChild(h("div",{style:{fontSize:"11px",color:"var(--textDim)",marginBottom:"6px"}},"Alternatives: "+dec.alternatives));
-              const addD=h("button",{style:{padding:"4px 10px",borderRadius:"6px",border:"1px solid var(--success)44",background:"transparent",color:"var(--success)",fontSize:"11px",fontWeight:600,cursor:"pointer",fontFamily:"inherit",opacity:dec._added?0.5:1},disabled:!!dec._added,onClick:()=>{
-                History.save();
-                const nd=mkDec({title:dec.title,decision:dec.decision||"",rationale:dec.rationale||"",alternatives:dec.alternatives||"",category:dec.category||"Design",status:"Proposed",affectedReqs:[cur.id]});
-                S.decisions.push(nd);autoSave();dec._added=true;toast("Added "+nd.id,"success");render();
-              }});
-              addD.textContent=dec._added?"✓ Added":"+ Add Decision";card.appendChild(addD);
-              sp.appendChild(card);
-            });
-          }
-
-          // Dismiss
-          sp.appendChild(h("button",{style:{marginTop:"8px",padding:"5px 12px",borderRadius:"6px",border:"1px solid var(--border)",background:"transparent",color:"var(--textMid)",fontSize:"11px",cursor:"pointer",fontFamily:"inherit"},onClick:()=>{S.llmSuggest=null;render();}},"✕ Dismiss"));
-        }
-        center.appendChild(sp);
-      }
 
       // ═══ COMMENTS & REVIEW ═══
       const cmtCard=h("div",{className:"card",style:{marginBottom:"14px"}});
@@ -3510,6 +3507,13 @@ function render(){
       scSummary.appendChild(h("span",{style:{color:"var(--danger)"}},"✕ "+curA.failed));
       scSummary.appendChild(h("span",{style:{color:"var(--warn)"}},"⚠ "+curA.warnings));
       scoreCard.appendChild(scSummary);qp.appendChild(scoreCard);
+
+      // LLM Status indicator
+      const llmStatus=h("div",{style:{display:"flex",alignItems:"center",gap:"8px",padding:"8px 12px",background:llmConfigured?"var(--success)08":"var(--surface)",border:"1px solid "+(llmConfigured?"var(--success)22":"var(--border)"),borderRadius:"8px",marginBottom:"14px",cursor:"pointer",fontSize:"11px"},onClick:()=>{S.showLLMSettings=true;render();}});
+      llmStatus.appendChild(h("span",{style:{width:"7px",height:"7px",borderRadius:"50%",background:llmConfigured?"var(--success)":"var(--textDim)",flexShrink:0}}));
+      llmStatus.appendChild(h("span",{style:{color:llmConfigured?"var(--success)":"var(--textDim)",fontWeight:600}},llmConfigured?"LLM Connected":"LLM Not Configured"));
+      if(llmConfigured)llmStatus.appendChild(h("span",{style:{color:"var(--textDim)",fontSize:"10px",marginLeft:"auto"}},S.llm.model.split("-").slice(0,2).join("-")));
+      qp.appendChild(llmStatus);
 
       const ruleCard=h("div",{id:"rules-panel",className:"card",style:{flex:1,overflowY:"auto",padding:"16px",minHeight:0}});
       ruleCard.appendChild(h("div",{style:{fontSize:"12px",fontWeight:600,marginBottom:"12px"}},"Rule Analysis"));
