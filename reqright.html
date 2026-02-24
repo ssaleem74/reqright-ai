@@ -517,6 +517,7 @@ const S={
   llmReview:null, // {reqId, original, suggested, changes, confidence, loading, error}
   llmBatch:null, // {total, done, improved, failed, running, results, currentId}
   llmGen:null, // {description, count, loading, error, results}
+  llmDecomp:null, // {reqId, loading, error, results}
 };
 
 function setState(updates){Object.assign(S,updates);render();}
@@ -1091,6 +1092,75 @@ async function bulkLLMAI(threshold=80){
   S.llmBatch.running=false;S.llmBatch.currentId=null;
   autoSave();render();
   toast(`LLM batch: ${S.llmBatch.improved} improved, ${S.llmBatch.failed} failed of ${S.llmBatch.total}`,"success");
+}
+
+// ─── LLM DECOMPOSE INTO CHILDREN ────────────────────────────
+async function llmDecompose(req){
+  const glossaryTerms=S.glossary.map(g=>g.term+": "+g.def).join("\n");
+  const existingIds=S.reqs.map(r=>r.id).join(", ");
+  const childLevel=req.level==="Stakeholder Need"?"System Requirement":req.level==="System Requirement"?"Subsystem Requirement":req.level==="Subsystem Requirement"?"Component Requirement":"Component Requirement";
+
+  const systemPrompt=`You are an expert systems engineer specialising in INCOSE Guide to Writing Requirements (GtWR) v4. Decompose a parent requirement into 3–5 child requirements at the next level down.
+
+PARENT REQUIREMENT:
+- ID: ${req.id}
+- Level: ${req.level}
+- Type: ${req.type}
+- Text: "${req.text}"
+
+DECOMPOSITION RULES:
+- Child level should be: ${childLevel}
+- Each child must be traceable to the parent (addresses a specific aspect)
+- Children together should fully satisfy the parent requirement
+- No child should duplicate or contradict another
+- Each child must follow INCOSE GtWR v4:
+  · Use "shall" as obligation keyword
+  · Active voice with named subject
+  · One requirement per statement
+  · Include measurable values with ± tolerances
+  · Avoid vague terms, escape clauses, absolutes, pronouns
+${glossaryTerms?"\nPROJECT GLOSSARY:\n"+glossaryTerms:""}
+
+EXISTING IDS (do not reuse): ${existingIds}
+
+RESPOND WITH ONLY A JSON ARRAY — no markdown, no backticks:
+[{"text":"child requirement text","type":"type","level":"${childLevel}","priority":"Critical|High|Medium|Low","verification":"Test|Analysis|Inspection|Demonstration","rationale":"how this child traces to the parent"}]`;
+
+  const userPrompt=`Decompose this ${req.level} into ${childLevel} children:\n\n"${req.text}"`;
+
+  let resp;
+  if(S.llm.provider==="anthropic"){
+    resp=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-api-key":S.llm.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+      body:JSON.stringify({model:S.llm.model,max_tokens:2048,system:systemPrompt,messages:[{role:"user",content:userPrompt}]})
+    });
+  } else {
+    resp=await fetch("https://api.openai.com/v1/chat/completions",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+S.llm.apiKey},
+      body:JSON.stringify({model:S.llm.model,max_tokens:2048,messages:[{role:"system",content:systemPrompt},{role:"user",content:userPrompt}]})
+    });
+  }
+  if(!resp.ok){const err=await resp.json().catch(()=>({}));throw new Error((err.error&&err.error.message)||"HTTP "+resp.status);}
+  const data=await resp.json();
+  let raw;
+  if(S.llm.provider==="anthropic"){raw=(data.content&&data.content[0]&&data.content[0].text)||"";}
+  else{raw=(data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content)||"";}
+  return JSON.parse(raw.replace(/```json|```/g,"").trim());
+}
+
+async function doDecompose(id){
+  const r=S.reqs.find(x=>x.id===id);if(!r||!r.text.trim())return;
+  S.llmDecomp={reqId:id,loading:true,error:null,results:null};render();
+  try{
+    const results=await llmDecompose(r);
+    S.llmDecomp.results=Array.isArray(results)?results:[results];
+    S.llmDecomp.loading=false;
+  }catch(e){
+    S.llmDecomp.loading=false;S.llmDecomp.error=e.message||"Decomposition failed";
+  }
+  render();
 }
 function doImport(){
   History.save();
@@ -3047,6 +3117,80 @@ function render(){
       ratDiv.appendChild(h("label",{className:"label"},"Rationale (per R20 — purpose goes here, not in statement)"));
       ratDiv.appendChild(h("textarea",{className:"input",style:{height:"auto",resize:"vertical",lineHeight:"1.6"},rows:3,value:cur.rationale||"",placeholder:"Why is this requirement necessary?",onInput:e=>updateReqSilent(cur.id,{rationale:e.target.value})}));
       attrCard.appendChild(ratDiv);center.appendChild(attrCard);
+
+      // ═══ DECOMPOSE PANEL ═══
+      if(S.llm.apiKey&&S.llm.apiKey.length>10){
+        const decompCard=h("div",{style:{marginBottom:"14px"}});
+        
+        // Decompose button row
+        const decompRow=h("div",{style:{display:"flex",alignItems:"center",gap:"10px",marginBottom:S.llmDecomp&&S.llmDecomp.reqId===cur.id?"14px":"0"}});
+        const childCount=S.reqs.filter(r=>r.parent===cur.id).length;
+        const decompBtn=h("button",{style:{padding:"8px 16px",borderRadius:"8px",border:"1px solid var(--purple)44",background:"transparent",color:"var(--purple)",fontSize:"12px",fontWeight:600,cursor:"pointer",fontFamily:"inherit",opacity:S.llmDecomp&&S.llmDecomp.loading?0.6:1},disabled:S.llmDecomp&&S.llmDecomp.loading,onClick:()=>doDecompose(cur.id)});
+        decompBtn.textContent=S.llmDecomp&&S.llmDecomp.loading&&S.llmDecomp.reqId===cur.id?"🔀 Decomposing...":"🔀 Decompose into Children";
+        decompRow.appendChild(decompBtn);
+        if(childCount>0){
+          decompRow.appendChild(h("span",{style:{fontSize:"11px",color:"var(--textDim)"}},childCount+" existing child"+(childCount>1?"ren":"")));
+        }
+        decompCard.appendChild(decompRow);
+
+        // Results
+        if(S.llmDecomp&&S.llmDecomp.reqId===cur.id&&!S.llmDecomp.loading){
+          const dp=h("div",{style:{background:"var(--card)",border:"1px solid var(--purple)33",borderRadius:"12px",padding:"16px"}});
+
+          if(S.llmDecomp.error){
+            dp.appendChild(h("div",{style:{fontSize:"13px",color:"var(--danger)",marginBottom:"8px"}},"✕ "+S.llmDecomp.error));
+            dp.appendChild(h("button",{style:{padding:"5px 12px",borderRadius:"6px",border:"1px solid var(--border)",background:"transparent",color:"var(--textMid)",fontSize:"11px",cursor:"pointer",fontFamily:"inherit"},onClick:()=>{S.llmDecomp=null;render();}},"Dismiss"));
+          } else if(S.llmDecomp.results&&S.llmDecomp.results.length>0){
+            const dpHead=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}});
+            dpHead.appendChild(h("div",{style:{fontSize:"14px",fontWeight:600,color:"var(--purple)"}},"🔀 "+S.llmDecomp.results.length+" Child Requirements Generated"));
+            const addAllDecomp=h("button",{style:{padding:"6px 14px",borderRadius:"6px",border:"none",background:"var(--success)",color:"#fff",fontSize:"12px",fontWeight:600,cursor:"pointer",fontFamily:"inherit"},onClick:()=>{
+              History.save();const cnt=S.llmDecomp.results.length;
+              S.llmDecomp.results.forEach(res=>{
+                const r=mkReq({text:res.text,type:res.type||cur.type,level:res.level||"Subsystem Requirement",priority:res.priority||cur.priority,verification:res.verification||cur.verification,rationale:res.rationale||"",parent:cur.id});
+                if(!r.history)r.history=[];
+                r.history.push({timestamp:new Date().toISOString(),field:"Created (LLM Decompose)",oldValue:"",newValue:res.text.substring(0,60)+(res.text.length>60?"…":""),author:"LLM ("+S.llm.model+")"});
+                S.reqs.push(r);
+              });
+              S.llmDecomp=null;autoSave();toast("Added "+cnt+" child requirements to "+cur.id,"success");render();
+            }});
+            addAllDecomp.textContent="✓ Add All as Children";
+            dpHead.appendChild(addAllDecomp);dp.appendChild(dpHead);
+
+            // Parent reference
+            dp.appendChild(h("div",{style:{fontSize:"11px",color:"var(--textDim)",marginBottom:"12px",padding:"6px 10px",background:"var(--surfAlt)",borderRadius:"6px"}},"Parent: "+cur.id+" — "+(cur.text||"").substring(0,80)+(cur.text.length>80?"…":"")));
+
+            S.llmDecomp.results.forEach((res,i)=>{
+              const card=h("div",{style:{padding:"12px",borderRadius:"8px",border:"1px solid var(--border)",background:"var(--surface)",marginBottom:"8px"}});
+              const top=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px"}});
+              const tags=h("div",{style:{display:"flex",gap:"6px",flexWrap:"wrap"}});
+              if(res.type)tags.appendChild(h("span",{className:"badge",style:{fontSize:"10px",background:"var(--accent)22",color:"var(--accent)"}},res.type));
+              if(res.level)tags.appendChild(h("span",{className:"badge",style:{fontSize:"10px"}},res.level.replace(" Requirement","")));
+              if(res.verification)tags.appendChild(h("span",{className:"badge",style:{fontSize:"10px",background:"var(--success)22",color:"var(--success)"}},res.verification));
+              top.appendChild(tags);
+              const score=analyze(res.text||"").score;const sc=score>=80?"var(--success)":score>=60?"var(--warn)":"var(--danger)";
+              top.appendChild(h("span",{style:{fontSize:"12px",fontWeight:700,color:sc}},score+"%"));
+              card.appendChild(top);
+              card.appendChild(h("div",{style:{fontSize:"13px",color:"var(--text)",lineHeight:"1.6",marginBottom:"6px"}},res.text||""));
+              if(res.rationale)card.appendChild(h("div",{style:{fontSize:"11px",color:"var(--textDim)",fontStyle:"italic",marginBottom:"6px"}},"↳ "+res.rationale));
+              
+              const addOne=h("button",{style:{padding:"4px 10px",borderRadius:"6px",border:"1px solid var(--success)44",background:"transparent",color:"var(--success)",fontSize:"11px",fontWeight:600,cursor:"pointer",fontFamily:"inherit",opacity:res._added?0.5:1},disabled:!!res._added,onClick:()=>{
+                History.save();
+                const r=mkReq({text:res.text,type:res.type||cur.type,level:res.level||"Subsystem Requirement",priority:res.priority||cur.priority,verification:res.verification||cur.verification,rationale:res.rationale||"",parent:cur.id});
+                if(!r.history)r.history=[];
+                r.history.push({timestamp:new Date().toISOString(),field:"Created (LLM Decompose)",oldValue:"",newValue:res.text.substring(0,60)+(res.text.length>60?"…":""),author:"LLM ("+S.llm.model+")"});
+                S.reqs.push(r);autoSave();res._added=true;toast("Added child of "+cur.id,"success");render();
+              }});
+              addOne.textContent=res._added?"✓ Added":"+ Add";card.appendChild(addOne);
+              dp.appendChild(card);
+            });
+
+            // Dismiss
+            dp.appendChild(h("button",{style:{marginTop:"6px",padding:"5px 12px",borderRadius:"6px",border:"1px solid var(--border)",background:"transparent",color:"var(--textMid)",fontSize:"11px",cursor:"pointer",fontFamily:"inherit"},onClick:()=>{S.llmDecomp=null;render();}},"✕ Dismiss"));
+          }
+          decompCard.appendChild(dp);
+        }
+        center.appendChild(decompCard);
+      }
 
       // ═══ COMMENTS & REVIEW ═══
       const cmtCard=h("div",{className:"card",style:{marginBottom:"14px"}});
