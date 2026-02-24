@@ -1,0 +1,281 @@
+{
+  "project": "LLM Rewrite Test Suite — ReqRight AI",
+  "version": "2.6.0",
+  "standard": "INCOSE GtWR v4",
+  "exportDate": "2026-02-24T00:32:29.264Z",
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "The system should handle data properly and efficiently.",
+      "type": "Functional",
+      "level": "System Requirement",
+      "priority": "High",
+      "verification": "Test",
+      "rationale": "TC-2.7: Tests vague terms, missing entity, wrong obligation keyword.",
+      "parent": "",
+      "status": "Draft",
+      "source": "Test Suite",
+      "risk": "Medium",
+      "comments": [],
+      "history": []
+    },
+    {
+      "id": "REQ-002",
+      "text": "All errors must be handled in a timely manner where possible.",
+      "type": "Functional",
+      "level": "System Requirement",
+      "priority": "High",
+      "verification": "Test",
+      "rationale": "TC-2.8: Tests absolutes, escape clause, wrong keyword, vague timing.",
+      "parent": "",
+      "status": "Draft",
+      "source": "Test Suite",
+      "risk": "Medium",
+      "comments": [],
+      "history": []
+    },
+    {
+      "id": "REQ-003",
+      "text": "Data shall be processed by the system within 5 seconds.",
+      "type": "Performance",
+      "level": "System Requirement",
+      "priority": "Critical",
+      "verification": "Test",
+      "rationale": "TC-2.9: Tests passive voice, missing tolerance.",
+      "parent": "",
+      "status": "Draft",
+      "source": "Test Suite",
+      "risk": "Medium",
+      "comments": [],
+      "history": []
+    },
+    {
+      "id": "REQ-004",
+      "text": "The system shall always be available and reliable.",
+      "type": "Reliability",
+      "level": "System Requirement",
+      "priority": "Critical",
+      "verification": "Test",
+      "rationale": "TC: Tests absolute (always), multiple thoughts (and), vague (reliable).",
+      "parent": "",
+      "status": "Draft",
+      "source": "Test Suite",
+      "risk": "High",
+      "comments": [],
+      "history": []
+    },
+    {
+      "id": "REQ-005",
+      "text": "It shall send notifications to users.",
+      "type": "Functional",
+      "level": "System Requirement",
+      "priority": "Medium",
+      "verification": "Demonstration",
+      "rationale": "TC: Tests pronoun (It), missing named entity.",
+      "parent": "",
+      "status": "Draft",
+      "source": "Test Suite",
+      "risk": "Low",
+      "comments": [],
+      "history": []
+    },
+    {
+      "id": "REQ-006",
+      "text": "The system shall be able to process approx 1000 requests.",
+      "type": "Performance",
+      "level": "System Requirement",
+      "priority": "High",
+      "verification": "Test",
+      "rationale": "TC: Tests superfluous infinitive (be able to), abbreviation (approx), missing tolerance.",
+      "parent": "",
+      "status": "Draft",
+      "source": "Test Suite",
+      "risk": "Medium",
+      "comments": [],
+      "history": []
+    },
+    {
+      "id": "REQ-007",
+      "text": "The SW shall handle errors, exceptions, and edge cases as needed.",
+      "type": "Functional",
+      "level": "System Requirement",
+      "priority": "High",
+      "verification": "Test",
+      "rationale": "TC: Tests escape clause (as needed), multiple thoughts, abbreviation (SW).",
+      "parent": "",
+      "status": "Draft",
+      "source": "Test Suite",
+      "risk": "Medium",
+      "comments": [],
+      "history": []
+    },
+    {
+      "id": "REQ-008",
+      "text": "Performance should be adequate for the intended use case.",
+      "type": "Performance",
+      "level": "System Requirement",
+      "priority": "Medium",
+      "verification": "Analysis",
+      "rationale": "TC: Tests wrong keyword (should), vague (adequate), not measurable.",
+      "parent": "",
+      "status": "Draft",
+      "source": "Test Suite",
+      "risk": "Low",
+      "comments": [],
+      "history": []
+    },
+    {
+      "id": "REQ-009",
+      "text": "The Authentication_Module shall verify each user credential within 2 ± 0.5 seconds of submission.",
+      "type": "Performance",
+      "level": "System Requirement",
+      "priority": "Critical",
+      "verification": "Test",
+      "rationale": "Control: well-written requirement, should score 90%+.",
+      "parent": "",
+      "status": "Approved",
+      "source": "Test Suite",
+      "risk": "High",
+      "comments": [],
+      "history": []
+    },
+    {
+      "id": "REQ-010",
+      "text": "The Logging_Service shall record each system event with timestamp, severity level, and source module identifier.",
+      "type": "Functional",
+      "level": "System Requirement",
+      "priority": "High",
+      "verification": "Test",
+      "rationale": "Control: well-written requirement, should score 85%+.",
+      "parent": "",
+      "status": "Approved",
+      "source": "Test Suite",
+      "risk": "Low",
+      "comments": [],
+      "history": []
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Use Claude Sonnet 4.5 for LLM rewrites",
+      "desc": "Selected Claude Sonnet 4.5 as the default model for requirement rewriting due to balance of quality and cost.",
+      "category": "Technology",
+      "status": "Approved",
+      "date": "2026-02-24",
+      "maker": "Systems Engineer",
+      "rationale": "Sonnet provides strong reasoning at $3/M input tokens. Haiku available as cheaper fallback.",
+      "affectedReqs": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003",
+        "REQ-004",
+        "REQ-005",
+        "REQ-006",
+        "REQ-007",
+        "REQ-008"
+      ]
+    }
+  ],
+  "risks": [
+    {
+      "id": "RSK-001",
+      "title": "LLM hallucination changes requirement intent",
+      "desc": "The LLM may introduce scope or meaning not present in the original requirement.",
+      "category": "Technical",
+      "likelihood": "3 - Possible",
+      "impact": "4 - Major",
+      "status": "Open",
+      "mitigation": "Review panel shows original vs suggested side-by-side. User must explicitly accept.",
+      "linkedReqs": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003"
+      ]
+    },
+    {
+      "id": "RSK-002",
+      "title": "API cost exceeds budget during batch operations",
+      "desc": "Batch rewriting large requirement sets could consume significant API credits.",
+      "category": "Cost",
+      "likelihood": "2 - Unlikely",
+      "impact": "2 - Minor",
+      "status": "Mitigated",
+      "mitigation": "Cost estimate shown in settings. Batch processes sequentially so user can monitor.",
+      "linkedReqs": []
+    }
+  ],
+  "stakeholders": [
+    {
+      "id": "STK-001",
+      "name": "QA Tester",
+      "role": "End User",
+      "org": "ReqRight Development",
+      "category": "Internal",
+      "influence": "High",
+      "concerns": "Test coverage, reproducible results, clear pass/fail criteria",
+      "expectations": "Loadable test data with known-bad requirements for each INCOSE rule category"
+    }
+  ],
+  "interfaces": [],
+  "useCases": [
+    {
+      "id": "UC-001",
+      "name": "Single LLM Rewrite Test",
+      "type": "Operational",
+      "actors": [
+        "Tester"
+      ],
+      "trigger": "Tester selects bad requirement and clicks ✨ LLM Rewrite",
+      "preconditions": "API key configured and connected, test project loaded",
+      "mainFlow": "1. Select REQ-001 through REQ-008 one at a time\n2. Click ✨ LLM Rewrite\n3. Review panel appears with original vs suggested\n4. Check score improvement\n5. Accept or discard\n6. Verify version history entry",
+      "postconditions": "Requirement rewritten with higher INCOSE score",
+      "priority": "Critical",
+      "status": "Validated",
+      "derivedReqs": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003",
+        "REQ-004",
+        "REQ-005",
+        "REQ-006",
+        "REQ-007",
+        "REQ-008"
+      ]
+    },
+    {
+      "id": "UC-002",
+      "name": "Batch LLM Rewrite Test",
+      "type": "Operational",
+      "actors": [
+        "Tester"
+      ],
+      "trigger": "Tester clicks ✨ LLM Fix All Below 80%",
+      "preconditions": "API key configured, test project loaded with mix of good and bad requirements",
+      "mainFlow": "1. Open ⚡ AI modal\n2. Click ✨ LLM Fix All Below 80%\n3. Watch progress bar\n4. Verify only REQ-001 to REQ-008 are processed\n5. REQ-009 and REQ-010 should be skipped (score > 80%)\n6. Check results list for score changes\n7. Dismiss progress panel\n8. Verify all rewrites in version history",
+      "postconditions": "All low-scoring requirements improved, high-scoring untouched",
+      "priority": "Critical",
+      "status": "Validated",
+      "derivedReqs": []
+    }
+  ],
+  "glossary": [
+    {
+      "term": "LLM",
+      "def": "Large Language Model — AI model used for context-aware requirement rewriting"
+    },
+    {
+      "term": "INCOSE",
+      "def": "International Council on Systems Engineering"
+    },
+    {
+      "term": "GtWR",
+      "def": "Guide to Writing Requirements — INCOSE standard, version 4"
+    },
+    {
+      "term": "SW",
+      "def": "Software — intentionally used as abbreviation in REQ-007 to test R38"
+    }
+  ],
+  "ruleWeights": {}
+}
