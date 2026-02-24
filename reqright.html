@@ -518,6 +518,7 @@ const S={
   llmBatch:null, // {total, done, improved, failed, running, results, currentId}
   llmGen:null, // {description, count, loading, error, results}
   llmDecomp:null, // {reqId, loading, error, results}
+  llmSuggest:null, // {reqId, loading, error, risks, decisions}
 };
 
 function setState(updates){Object.assign(S,updates);render();}
@@ -1159,6 +1160,82 @@ async function doDecompose(id){
     S.llmDecomp.loading=false;
   }catch(e){
     S.llmDecomp.loading=false;S.llmDecomp.error=e.message||"Decomposition failed";
+  }
+  render();
+}
+
+// ─── LLM RISK & DECISION SUGGESTIONS ────────────────────────
+async function llmSuggestAPI(req){
+  const glossaryTerms=S.glossary.map(g=>g.term+": "+g.def).join("\n");
+  const existingRisks=S.risks.map(r=>r.id+": "+r.title).join("\n");
+  const existingDecs=S.decisions.map(d=>d.id+": "+d.title).join("\n");
+
+  const systemPrompt=`You are an expert systems engineer. Given a requirement, suggest associated risks and design decisions.
+
+REQUIREMENT:
+- ID: ${req.id}
+- Type: ${req.type}
+- Level: ${req.level}
+- Text: "${req.text}"
+${glossaryTerms?"\nPROJECT GLOSSARY:\n"+glossaryTerms:""}
+${existingRisks?"\nEXISTING RISKS (avoid duplicating):\n"+existingRisks:""}
+${existingDecs?"\nEXISTING DECISIONS (avoid duplicating):\n"+existingDecs:""}
+
+RISK FORMAT:
+- title: short risk title
+- description: detailed risk description
+- category: Technical|Schedule|Cost|Resource|External|Safety|Security
+- likelihood: 1 (Rare) to 5 (Almost Certain)
+- impact: 1 (Negligible) to 5 (Catastrophic)
+- mitigation: suggested mitigation approach
+- status: Open
+
+DECISION FORMAT:
+- title: short decision title
+- decision: the decision statement
+- rationale: why this decision is needed
+- alternatives: other options considered
+- category: Design|Technology|Architecture|Process|Resource|Interface
+
+RESPOND WITH ONLY A JSON OBJECT — no markdown, no backticks:
+{"risks":[{"title":"...","description":"...","category":"...","likelihood":3,"impact":3,"mitigation":"..."}],"decisions":[{"title":"...","decision":"...","rationale":"...","alternatives":"...","category":"..."}]}
+
+Generate 2-3 risks and 1-2 decisions that are specifically relevant to this requirement.`;
+
+  const userPrompt=`Suggest risks and decisions for this requirement:\n\n"${req.text}"`;
+
+  let resp;
+  if(S.llm.provider==="anthropic"){
+    resp=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-api-key":S.llm.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+      body:JSON.stringify({model:S.llm.model,max_tokens:2048,system:systemPrompt,messages:[{role:"user",content:userPrompt}]})
+    });
+  } else {
+    resp=await fetch("https://api.openai.com/v1/chat/completions",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+S.llm.apiKey},
+      body:JSON.stringify({model:S.llm.model,max_tokens:2048,messages:[{role:"system",content:systemPrompt},{role:"user",content:userPrompt}]})
+    });
+  }
+  if(!resp.ok){const err=await resp.json().catch(()=>({}));throw new Error((err.error&&err.error.message)||"HTTP "+resp.status);}
+  const data=await resp.json();
+  let raw;
+  if(S.llm.provider==="anthropic"){raw=(data.content&&data.content[0]&&data.content[0].text)||"";}
+  else{raw=(data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content)||"";}
+  return JSON.parse(raw.replace(/```json|```/g,"").trim());
+}
+
+async function doSuggest(id){
+  const r=S.reqs.find(x=>x.id===id);if(!r||!r.text.trim())return;
+  S.llmSuggest={reqId:id,loading:true,error:null,risks:null,decisions:null};render();
+  try{
+    const result=await llmSuggestAPI(r);
+    S.llmSuggest.risks=result.risks||[];
+    S.llmSuggest.decisions=result.decisions||[];
+    S.llmSuggest.loading=false;
+  }catch(e){
+    S.llmSuggest.loading=false;S.llmSuggest.error=e.message||"Suggestion failed";
   }
   render();
 }
@@ -3128,6 +3205,10 @@ function render(){
         const decompBtn=h("button",{style:{padding:"8px 16px",borderRadius:"8px",border:"1px solid var(--purple)44",background:"transparent",color:"var(--purple)",fontSize:"12px",fontWeight:600,cursor:"pointer",fontFamily:"inherit",opacity:S.llmDecomp&&S.llmDecomp.loading?0.6:1},disabled:S.llmDecomp&&S.llmDecomp.loading,onClick:()=>doDecompose(cur.id)});
         decompBtn.textContent=S.llmDecomp&&S.llmDecomp.loading&&S.llmDecomp.reqId===cur.id?"🔀 Decomposing...":"🔀 Decompose into Children";
         decompRow.appendChild(decompBtn);
+        // Suggest risks & decisions button
+        const sugBtn=h("button",{style:{padding:"8px 16px",borderRadius:"8px",border:"1px solid #f59e0b44",background:"transparent",color:"#f59e0b",fontSize:"12px",fontWeight:600,cursor:"pointer",fontFamily:"inherit",opacity:S.llmSuggest&&S.llmSuggest.loading?0.6:1},disabled:S.llmSuggest&&S.llmSuggest.loading,onClick:()=>doSuggest(cur.id)});
+        sugBtn.textContent=S.llmSuggest&&S.llmSuggest.loading&&S.llmSuggest.reqId===cur.id?"💡 Analysing...":"💡 Suggest Risks & Decisions";
+        decompRow.appendChild(sugBtn);
         if(childCount>0){
           decompRow.appendChild(h("span",{style:{fontSize:"11px",color:"var(--textDim)"}},childCount+" existing child"+(childCount>1?"ren":"")));
         }
@@ -3190,6 +3271,95 @@ function render(){
           decompCard.appendChild(dp);
         }
         center.appendChild(decompCard);
+      }
+
+      // ═══ LLM SUGGEST RISKS & DECISIONS PANEL ═══
+      if(S.llmSuggest&&S.llmSuggest.reqId===cur.id&&!S.llmSuggest.loading){
+        const sp=h("div",{style:{background:"var(--card)",border:"1px solid #f59e0b33",borderRadius:"12px",padding:"16px",marginBottom:"14px"}});
+
+        if(S.llmSuggest.error){
+          sp.appendChild(h("div",{style:{fontSize:"13px",color:"var(--danger)",marginBottom:"8px"}},"✕ "+S.llmSuggest.error));
+          sp.appendChild(h("button",{style:{padding:"5px 12px",borderRadius:"6px",border:"1px solid var(--border)",background:"transparent",color:"var(--textMid)",fontSize:"11px",cursor:"pointer",fontFamily:"inherit"},onClick:()=>{S.llmSuggest=null;render();}},"Dismiss"));
+        } else {
+          const spHead=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}});
+          const rCnt=(S.llmSuggest.risks||[]).length;const dCnt=(S.llmSuggest.decisions||[]).length;
+          spHead.appendChild(h("div",{style:{fontSize:"14px",fontWeight:600,color:"#f59e0b"}},"💡 "+rCnt+" Risk"+(rCnt!==1?"s":"")+", "+dCnt+" Decision"+(dCnt!==1?"s":"")+" Suggested"));
+          // Add all button
+          const addAllSD=h("button",{style:{padding:"6px 14px",borderRadius:"6px",border:"none",background:"var(--success)",color:"#fff",fontSize:"12px",fontWeight:600,cursor:"pointer",fontFamily:"inherit"},onClick:()=>{
+            History.save();let rc=0,dc=0;
+            (S.llmSuggest.risks||[]).forEach(rsk=>{
+              if(rsk._added)return;
+              const nr=mkRisk({title:rsk.title,description:rsk.description||rsk.desc||"",category:rsk.category||"Technical",likelihood:rsk.likelihood||3,impact:rsk.impact||3,status:"Open",mitigations:rsk.mitigation?[rsk.mitigation]:[],linkedReqs:[cur.id]});
+              S.risks.push(nr);rsk._added=true;rc++;
+            });
+            (S.llmSuggest.decisions||[]).forEach(dec=>{
+              if(dec._added)return;
+              const nd=mkDec({title:dec.title,decision:dec.decision||"",rationale:dec.rationale||"",alternatives:dec.alternatives||"",category:dec.category||"Design",status:"Proposed",affectedReqs:[cur.id]});
+              S.decisions.push(nd);dec._added=true;dc++;
+            });
+            autoSave();toast("Added "+rc+" risks, "+dc+" decisions","success");render();
+          }});
+          addAllSD.textContent="✓ Add All";spHead.appendChild(addAllSD);
+          sp.appendChild(spHead);
+
+          // Risks
+          if(rCnt>0){
+            sp.appendChild(h("div",{style:{fontSize:"12px",fontWeight:600,color:"var(--danger)",marginBottom:"8px",textTransform:"uppercase",letterSpacing:".05em"}},"⚠ Risks"));
+            (S.llmSuggest.risks||[]).forEach(rsk=>{
+              const card=h("div",{style:{padding:"12px",borderRadius:"8px",border:"1px solid var(--border)",background:"var(--surface)",marginBottom:"8px"}});
+              const top=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px"}});
+              const left=h("div",{style:{display:"flex",alignItems:"center",gap:"8px"}});
+              left.appendChild(h("span",{style:{fontSize:"13px",fontWeight:600}},rsk.title));
+              const score=(rsk.likelihood||3)*(rsk.impact||3);
+              const sevColor=score>=15?"var(--danger)":score>=10?"#f97316":score>=5?"var(--warn)":"var(--success)";
+              const sevLabel=score>=15?"Critical":score>=10?"High":score>=5?"Medium":"Low";
+              left.appendChild(h("span",{className:"badge",style:{fontSize:"10px",background:sevColor+"22",color:sevColor}},sevLabel+" ("+score+")"));
+              top.appendChild(left);
+              const tags=h("div",{style:{display:"flex",gap:"4px"}});
+              tags.appendChild(h("span",{className:"badge",style:{fontSize:"10px"}},rsk.category||"Technical"));
+              tags.appendChild(h("span",{className:"badge",style:{fontSize:"10px"}},"L:"+rsk.likelihood+" × I:"+rsk.impact));
+              top.appendChild(tags);
+              card.appendChild(top);
+              if(rsk.description||rsk.desc)card.appendChild(h("div",{style:{fontSize:"12px",color:"var(--textMid)",lineHeight:"1.5",marginBottom:"6px"}},rsk.description||rsk.desc));
+              if(rsk.mitigation){
+                card.appendChild(h("div",{style:{fontSize:"11px",color:"var(--success)",marginBottom:"6px"}},"Mitigation: "+rsk.mitigation));
+              }
+              const addR=h("button",{style:{padding:"4px 10px",borderRadius:"6px",border:"1px solid var(--success)44",background:"transparent",color:"var(--success)",fontSize:"11px",fontWeight:600,cursor:"pointer",fontFamily:"inherit",opacity:rsk._added?0.5:1},disabled:!!rsk._added,onClick:()=>{
+                History.save();
+                const nr=mkRisk({title:rsk.title,description:rsk.description||rsk.desc||"",category:rsk.category||"Technical",likelihood:rsk.likelihood||3,impact:rsk.impact||3,status:"Open",mitigations:rsk.mitigation?[rsk.mitigation]:[],linkedReqs:[cur.id]});
+                S.risks.push(nr);autoSave();rsk._added=true;toast("Added "+nr.id,"success");render();
+              }});
+              addR.textContent=rsk._added?"✓ Added":"+ Add Risk";card.appendChild(addR);
+              sp.appendChild(card);
+            });
+          }
+
+          // Decisions
+          if(dCnt>0){
+            sp.appendChild(h("div",{style:{fontSize:"12px",fontWeight:600,color:"var(--accent)",marginBottom:"8px",marginTop:"12px",textTransform:"uppercase",letterSpacing:".05em"}},"📋 Decisions"));
+            (S.llmSuggest.decisions||[]).forEach(dec=>{
+              const card=h("div",{style:{padding:"12px",borderRadius:"8px",border:"1px solid var(--border)",background:"var(--surface)",marginBottom:"8px"}});
+              const top=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px"}});
+              top.appendChild(h("span",{style:{fontSize:"13px",fontWeight:600}},dec.title));
+              top.appendChild(h("span",{className:"badge",style:{fontSize:"10px"}},dec.category||"Design"));
+              card.appendChild(top);
+              if(dec.decision)card.appendChild(h("div",{style:{fontSize:"12px",color:"var(--text)",lineHeight:"1.5",marginBottom:"4px"}},dec.decision));
+              if(dec.rationale)card.appendChild(h("div",{style:{fontSize:"11px",color:"var(--textDim)",fontStyle:"italic",marginBottom:"4px"}},"Rationale: "+dec.rationale));
+              if(dec.alternatives)card.appendChild(h("div",{style:{fontSize:"11px",color:"var(--textDim)",marginBottom:"6px"}},"Alternatives: "+dec.alternatives));
+              const addD=h("button",{style:{padding:"4px 10px",borderRadius:"6px",border:"1px solid var(--success)44",background:"transparent",color:"var(--success)",fontSize:"11px",fontWeight:600,cursor:"pointer",fontFamily:"inherit",opacity:dec._added?0.5:1},disabled:!!dec._added,onClick:()=>{
+                History.save();
+                const nd=mkDec({title:dec.title,decision:dec.decision||"",rationale:dec.rationale||"",alternatives:dec.alternatives||"",category:dec.category||"Design",status:"Proposed",affectedReqs:[cur.id]});
+                S.decisions.push(nd);autoSave();dec._added=true;toast("Added "+nd.id,"success");render();
+              }});
+              addD.textContent=dec._added?"✓ Added":"+ Add Decision";card.appendChild(addD);
+              sp.appendChild(card);
+            });
+          }
+
+          // Dismiss
+          sp.appendChild(h("button",{style:{marginTop:"8px",padding:"5px 12px",borderRadius:"6px",border:"1px solid var(--border)",background:"transparent",color:"var(--textMid)",fontSize:"11px",cursor:"pointer",fontFamily:"inherit"},onClick:()=>{S.llmSuggest=null;render();}},"✕ Dismiss"));
+        }
+        center.appendChild(sp);
       }
 
       // ═══ COMMENTS & REVIEW ═══
