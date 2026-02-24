@@ -516,6 +516,7 @@ const S={
   llm:JSON.parse(localStorage.getItem("reqright_llm")||"null")||{provider:"anthropic",model:"claude-sonnet-4-5-20250929",apiKey:"",testStatus:null,testMsg:""},
   llmReview:null, // {reqId, original, suggested, changes, confidence, loading, error}
   llmBatch:null, // {total, done, improved, failed, running, results, currentId}
+  llmGen:null, // {description, count, loading, error, results}
 };
 
 function setState(updates){Object.assign(S,updates);render();}
@@ -805,6 +806,7 @@ document.addEventListener("keydown",e=>{
     if(S.showExport){S.showExport=false;render();}
     if(S.showBulkAI){S.showBulkAI=false;render();}
     if(S.showLLMSettings){S.showLLMSettings=false;render();}
+    if(S.llmGen&&!S.llmGen.loading){S.llmGen=null;render();}
     if(S.showImport){S.showImport=false;render();}
   }
 });
@@ -1014,6 +1016,52 @@ function acceptLLM(){
 }
 
 function rejectLLM(){S.llmReview=null;render();}
+
+// ─── LLM GENERATE FROM NATURAL LANGUAGE ─────────────────────
+async function llmGenerate(description, count=1){
+  const glossaryTerms=S.glossary.map(g=>g.term+": "+g.def).join("\n");
+  const existingTypes=[...new Set(S.reqs.map(r=>r.type))].join(", ");
+  const existingEntities=[...new Set(S.reqs.map(r=>{const m=r.text.match(/The\s+(\w+)/);return m?m[1]:null;}).filter(Boolean))].join(", ");
+
+  const systemPrompt=`You are an expert systems engineer specialising in INCOSE Guide to Writing Requirements (GtWR) v4. Generate ${count} formal requirement${count>1?"s":""} from a natural language description.
+
+INCOSE REQUIREMENT FORMAT:
+- Use "shall" as the obligation keyword
+- Active voice with named subject: "The [System_Name] shall..."
+- Include measurable values with ± tolerances where applicable
+- One requirement per statement (no combinators joining separate actions)
+- Avoid vague terms, escape clauses, absolutes, pronouns, abbreviations
+- Use "each" instead of "all/any/every"
+${glossaryTerms?"\nPROJECT GLOSSARY:\n"+glossaryTerms:""}
+${existingEntities?"\nEXISTING ENTITIES IN PROJECT: "+existingEntities:""}
+${existingTypes?"\nEXISTING TYPES IN PROJECT: "+existingTypes:""}
+
+RESPOND WITH ONLY A JSON ARRAY — no markdown, no backticks:
+[{"text":"the requirement statement","type":"Functional|Performance|Interface|Safety|Security|Reliability|Environmental|Maintainability|Regulatory|Human Factors|Data|Operational|Portability|Scalability|Compatibility|Usability","level":"System Requirement|Subsystem Requirement|Component Requirement|Stakeholder Need","priority":"Critical|High|Medium|Low","verification":"Test|Analysis|Inspection|Demonstration","rationale":"why this requirement is needed based on the description"}]`;
+
+  const userPrompt=`Generate ${count} INCOSE-compliant requirement${count>1?"s":""} from this description:\n\n"${description}"`;
+
+  let resp;
+  if(S.llm.provider==="anthropic"){
+    resp=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-api-key":S.llm.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+      body:JSON.stringify({model:S.llm.model,max_tokens:2048,system:systemPrompt,messages:[{role:"user",content:userPrompt}]})
+    });
+  } else {
+    resp=await fetch("https://api.openai.com/v1/chat/completions",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+S.llm.apiKey},
+      body:JSON.stringify({model:S.llm.model,max_tokens:2048,messages:[{role:"system",content:systemPrompt},{role:"user",content:userPrompt}]})
+    });
+  }
+  if(!resp.ok){const err=await resp.json().catch(()=>({}));throw new Error((err.error&&err.error.message)||"HTTP "+resp.status);}
+  const data=await resp.json();
+  let raw;
+  if(S.llm.provider==="anthropic"){raw=(data.content&&data.content[0]&&data.content[0].text)||"";}
+  else{raw=(data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content)||"";}
+  return JSON.parse(raw.replace(/```json|```/g,"").trim());
+}
 
 async function bulkLLMAI(threshold=80){
   const targets=S.reqs.filter(r=>r.text.trim()&&analyze(r.text).score<threshold);
@@ -2348,6 +2396,97 @@ function render(){
     modal.appendChild(mBody);
     overlay.appendChild(modal);app.appendChild(overlay);
   }
+
+  // ═══ LLM GENERATE MODAL ═══
+  if(S.llmGen){
+    const overlay=h("div",{className:"modal-overlay",onClick:()=>{if(!S.llmGen.loading){S.llmGen=null;render();}}});
+    const modal=h("div",{className:"modal",style:{width:"680px",maxHeight:"88vh",overflow:"auto",padding:0},onClick:e=>e.stopPropagation()});
+    const mHead=h("div",{style:{padding:"20px 24px 16px",borderBottom:"1px solid var(--border)"}});
+    const mTitle=h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}});
+    mTitle.appendChild(h("h2",{style:{fontSize:"18px",fontWeight:700}},"✨ Generate Requirements from Description"));
+    mTitle.appendChild(h("button",{style:{background:"none",border:"none",color:"var(--textMid)",fontSize:"18px",cursor:"pointer",padding:"4px 8px"},onClick:()=>{if(!S.llmGen.loading){S.llmGen=null;render();}}},"✕"));
+    mHead.appendChild(mTitle);
+    mHead.appendChild(h("p",{style:{color:"var(--textMid)",fontSize:"12px",marginTop:"4px"}},"Describe what you need in plain language. The LLM will generate formal INCOSE-compliant requirements."));
+    modal.appendChild(mHead);
+    const mBody=h("div",{style:{padding:"20px 24px"}});
+
+    // Description textarea
+    const descField=h("div",{style:{marginBottom:"16px"}});
+    descField.appendChild(h("label",{style:{display:"block",fontSize:"12px",fontWeight:600,color:"var(--textMid)",marginBottom:"6px",textTransform:"uppercase",letterSpacing:".05em"}},"Description"));
+    const descTA=h("textarea",{id:"llm-gen-desc",placeholder:"e.g. I need the sensor to work in cold weather down to -40 degrees, and it should report temperature every 5 seconds with good accuracy...",style:{width:"100%",minHeight:"100px",padding:"12px 14px",borderRadius:"8px",border:"1px solid var(--border)",background:"var(--surfAlt)",color:"var(--text)",fontSize:"13px",fontFamily:"inherit",lineHeight:"1.6",resize:"vertical"}});
+    descTA.value=S.llmGen.description||"";
+    descTA.addEventListener("input",e=>{S.llmGen.description=e.target.value;});
+    descField.appendChild(descTA);mBody.appendChild(descField);
+
+    // Count selector
+    const countRow=h("div",{style:{display:"flex",alignItems:"center",gap:"12px",marginBottom:"20px"}});
+    countRow.appendChild(h("label",{style:{fontSize:"12px",fontWeight:600,color:"var(--textMid)",textTransform:"uppercase",letterSpacing:".05em"}},"Generate"));
+    const countSel=h("select",{style:{padding:"8px 12px",borderRadius:"8px",border:"1px solid var(--border)",background:"var(--surfAlt)",color:"var(--text)",fontSize:"13px",fontFamily:"inherit",cursor:"pointer"},onChange:e=>{S.llmGen.count=parseInt(e.target.value);}});
+    [1,2,3,5].forEach(n=>{const opt=h("option",{value:n},n+" requirement"+(n>1?"s":""));if(S.llmGen.count===n)opt.selected=true;countSel.appendChild(opt);});
+    countRow.appendChild(countSel);
+    countRow.appendChild(h("span",{style:{fontSize:"11px",color:"var(--textDim)"}},"More = LLM decomposes your description into multiple aspects"));
+    mBody.appendChild(countRow);
+
+    // Generate button
+    const hasDesc=S.llmGen.description&&S.llmGen.description.trim().length>5;
+    const genBtn=h("button",{style:{padding:"10px 24px",borderRadius:"8px",border:"none",background:hasDesc&&!S.llmGen.loading?"linear-gradient(135deg,#8b5cf6,#06b6d4)":"var(--border)",color:hasDesc?"#fff":"var(--textDim)",fontSize:"14px",fontWeight:600,cursor:hasDesc&&!S.llmGen.loading?"pointer":"not-allowed",fontFamily:"inherit",marginBottom:"16px"},disabled:!hasDesc||S.llmGen.loading,onClick:async()=>{
+      if(!hasDesc||S.llmGen.loading)return;
+      S.llmGen.loading=true;S.llmGen.error=null;S.llmGen.results=null;render();
+      try{const r=await llmGenerate(S.llmGen.description,S.llmGen.count);S.llmGen.results=Array.isArray(r)?r:[r];}
+      catch(e){S.llmGen.error=e.message||"Generation failed";}
+      S.llmGen.loading=false;render();
+    }});
+    genBtn.textContent=S.llmGen.loading?"⏳ Generating...":"✨ Generate";
+    mBody.appendChild(genBtn);
+
+    // Error
+    if(S.llmGen.error){mBody.appendChild(h("div",{style:{padding:"10px 14px",borderRadius:"8px",background:"var(--danger)11",border:"1px solid var(--danger)33",color:"var(--danger)",fontSize:"12px",marginBottom:"16px"}},S.llmGen.error));}
+
+    // Results
+    if(S.llmGen.results&&S.llmGen.results.length>0){
+      const resHead=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}});
+      resHead.appendChild(h("div",{style:{fontSize:"14px",fontWeight:600,color:"var(--success)"}},"✓ "+S.llmGen.results.length+" requirement"+(S.llmGen.results.length>1?"s":"")+" generated"));
+      const addAllBtn=h("button",{style:{padding:"6px 14px",borderRadius:"6px",border:"none",background:"var(--success)",color:"#fff",fontSize:"12px",fontWeight:600,cursor:"pointer",fontFamily:"inherit"},onClick:()=>{
+        History.save();const cnt=S.llmGen.results.length;
+        S.llmGen.results.forEach(res=>{
+          const r=mkReq({text:res.text,type:res.type||"Functional",level:res.level||"System Requirement",priority:res.priority||"Medium",verification:res.verification||"Test",rationale:res.rationale||""});
+          if(!r.history)r.history=[];
+          r.history.push({timestamp:new Date().toISOString(),field:"Created (LLM Generate)",oldValue:"",newValue:res.text.substring(0,60)+(res.text.length>60?"…":""),author:"LLM ("+S.llm.model+")"});
+          S.reqs.push(r);S.selId=r.id;
+        });
+        S.view="editor";S.llmGen=null;autoSave();toast("Added "+cnt+" requirements","success");render();
+      }});
+      addAllBtn.textContent="✓ Add All to Project";resHead.appendChild(addAllBtn);mBody.appendChild(resHead);
+
+      S.llmGen.results.forEach((res,i)=>{
+        const card=h("div",{style:{padding:"14px",borderRadius:"10px",border:"1px solid var(--border)",background:"var(--surface)",marginBottom:"10px"}});
+        const top=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}});
+        const tags=h("div",{style:{display:"flex",gap:"6px",flexWrap:"wrap"}});
+        if(res.type)tags.appendChild(h("span",{className:"badge",style:{fontSize:"10px",background:"var(--accent)22",color:"var(--accent)"}},res.type));
+        if(res.level)tags.appendChild(h("span",{className:"badge",style:{fontSize:"10px"}},res.level.replace(" Requirement","")));
+        if(res.priority)tags.appendChild(h("span",{className:"badge",style:{fontSize:"10px"}},res.priority));
+        if(res.verification)tags.appendChild(h("span",{className:"badge",style:{fontSize:"10px",background:"var(--success)22",color:"var(--success)"}},res.verification));
+        top.appendChild(tags);
+        const score=analyze(res.text||"").score;const sc=score>=80?"var(--success)":score>=60?"var(--warn)":"var(--danger)";
+        top.appendChild(h("span",{style:{fontSize:"12px",fontWeight:700,color:sc}},score+"%"));
+        card.appendChild(top);
+        card.appendChild(h("div",{style:{fontSize:"13px",color:"var(--text)",lineHeight:"1.6",marginBottom:"8px"}},res.text||""));
+        if(res.rationale)card.appendChild(h("div",{style:{fontSize:"11px",color:"var(--textDim)",fontStyle:"italic",marginBottom:"8px"}},"Rationale: "+res.rationale));
+        const addOne=h("button",{style:{padding:"5px 12px",borderRadius:"6px",border:"1px solid var(--success)44",background:"transparent",color:"var(--success)",fontSize:"11px",fontWeight:600,cursor:"pointer",fontFamily:"inherit",opacity:res._added?0.5:1},disabled:!!res._added,onClick:()=>{
+          History.save();
+          const r=mkReq({text:res.text,type:res.type||"Functional",level:res.level||"System Requirement",priority:res.priority||"Medium",verification:res.verification||"Test",rationale:res.rationale||""});
+          if(!r.history)r.history=[];
+          r.history.push({timestamp:new Date().toISOString(),field:"Created (LLM Generate)",oldValue:"",newValue:res.text.substring(0,60)+(res.text.length>60?"…":""),author:"LLM ("+S.llm.model+")"});
+          S.reqs.push(r);S.selId=r.id;autoSave();res._added=true;toast("Added "+r.id,"success");render();
+        }});
+        addOne.textContent=res._added?"✓ Added":"+ Add This";card.appendChild(addOne);
+        mBody.appendChild(card);
+      });
+    }
+
+    modal.appendChild(mBody);overlay.appendChild(modal);app.appendChild(overlay);
+  }
+
   const header=h("header",{className:"header"});
 
   // ── Row 1: Logo + Actions ──
@@ -2385,6 +2524,12 @@ function render(){
   searchBtn.appendChild(h("span",{style:{fontSize:"11px",color:"var(--textDim)",fontFamily:"var(--mono)"}},"⌘K"));
   hActions.appendChild(searchBtn);
   hActions.appendChild(h("button",{className:"btn btn-pri",onClick:addReq},"+ New"));
+  // LLM Generate button
+  if(S.llm.apiKey&&S.llm.apiKey.length>10){
+    const genBtn=h("button",{style:{padding:"6px 12px",borderRadius:"8px",border:"none",background:"linear-gradient(135deg,#8b5cf6,#06b6d4)",color:"#fff",fontSize:"12px",fontWeight:600,cursor:"pointer",fontFamily:"inherit"},onClick:()=>{S.llmGen={description:"",count:1,loading:false,error:null,results:null};render();}});
+    genBtn.textContent="✨ Generate";
+    hActions.appendChild(genBtn);
+  }
   hActions.appendChild(h("button",{className:"btn btn-sec",style:{borderColor:"#f59e0b44",color:"#f59e0b"},onClick:()=>{S.showTemplates=true;render();}},"📋 Templates"));
 
   // File dropdown (Save/Load/Export consolidated)
