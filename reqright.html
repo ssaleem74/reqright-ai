@@ -3136,7 +3136,6 @@ function render(){
 
       // ═══ AI TOOLBAR (always visible) ═══
       const hasFails=cur.text.trim()&&curA&&curA.failed>0;
-      const childCount=S.reqs.filter(r=>r.parent===cur.id).length;
       const linkedRisks=S.risks.filter(rk=>rk.title&&(rk.linkedReqs||[]).includes(cur.id)).length;
       const linkedDecs=S.decisions.filter(dc=>(dc.affectedReqs||[]).includes(cur.id)).length;
 
